@@ -17,6 +17,7 @@ import { validate } from '../middleware/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { WORKSPACE_PERMISSIONS } from '../config/workspacePermissions';
 import { socialWorkspaceRoutes } from './social.routes';
+import { postWorkspaceRoutes } from './post.routes';
 import {
   workspaceIdParamSchema,
   memberIdParamSchema,
@@ -146,5 +147,8 @@ router.post(
 
 // --- Social accounts --------------------------------------------------------
 router.use('/:workspaceId/social', socialWorkspaceRoutes);
+
+// --- Posts (scheduler) ------------------------------------------------------
+router.use('/:workspaceId/posts', postWorkspaceRoutes);
 
 export default router;

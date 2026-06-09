@@ -247,6 +247,32 @@ class ZernioClient {
       },
     });
   }
+
+  async createPost(params: {
+    accountId: string;
+    content: string;
+    mediaUrls?: string[];
+    scheduledAt?: string;
+  }): Promise<{ postId?: string; id?: string; status?: string }> {
+    const data = await this.request<{ post: { _id?: string; id?: string; status?: string } }>(
+      '/posts',
+      {
+        method: 'POST',
+        body: {
+          accountId: params.accountId,
+          content: params.content,
+          mediaUrls: params.mediaUrls,
+          scheduledAt: params.scheduledAt,
+        },
+      },
+    );
+    const post = data.post ?? (data as unknown as { _id?: string; id?: string });
+    return {
+      postId: post._id ?? post.id,
+      id: post._id ?? post.id,
+      status: (post as { status?: string }).status,
+    };
+  }
 }
 
 export const zernioClient = new ZernioClient();

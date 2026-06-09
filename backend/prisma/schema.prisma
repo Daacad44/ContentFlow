@@ -61,6 +61,21 @@ enum SocialAccountStatus {
   PENDING
 }
 
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum PostTargetStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
 // ----------------------------------------------------------------------------
 // USER
 // ----------------------------------------------------------------------------
@@ -100,6 +115,7 @@ model User {
   auditLogs             AuditLog[]
   workspaceMemberships  WorkspaceMember[]
   sentInvitations       WorkspaceInvitation[] @relation("InvitedBy")
+  posts                 Post[]
 
   @@index([email])
   @@index([googleId])
@@ -192,6 +208,7 @@ model Workspace {
   invitations     WorkspaceInvitation[]
   socialProfile   SocialProfile?
   connectedAccounts ConnectedAccount[]
+  posts           Post[]
 
   @@index([slug])
   @@map("workspaces")
@@ -283,6 +300,8 @@ model ConnectedAccount {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
+  postTargets       PostTarget[]
+
   @@unique([workspaceId, zernioAccountId])
   @@index([workspaceId])
   @@index([platform])
@@ -307,4 +326,71 @@ model SocialOAuthState {
   @@index([tokenHash])
   @@index([socialProfileId])
   @@map("social_oauth_states")
+}
+
+// ----------------------------------------------------------------------------
+// POSTS (content scheduling — workspace-scoped)
+// ----------------------------------------------------------------------------
+
+model Post {
+  id          String     @id @default(uuid()) @db.Uuid
+  workspaceId String     @db.Uuid
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  authorId    String     @db.Uuid
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  content     String
+  status      PostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  media       PostMedia[]
+  targets     PostTarget[]
+
+  @@index([workspaceId])
+  @@index([authorId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("posts")
+}
+
+model PostMedia {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @db.Uuid
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  url       String
+  filename  String
+  mimeType  String
+  size      Int
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@map("post_media")
+}
+
+model PostTarget {
+  id                 String           @id @default(uuid()) @db.Uuid
+  postId             String           @db.Uuid
+  post               Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  connectedAccountId String           @db.Uuid
+  connectedAccount   ConnectedAccount @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+
+  status             PostTargetStatus @default(PENDING)
+  externalPostId     String?
+  errorMessage       String?
+  publishedAt        DateTime?
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([postId, connectedAccountId])
+  @@index([postId])
+  @@index([connectedAccountId])
+  @@map("post_targets")
 }

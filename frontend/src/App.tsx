@@ -20,6 +20,8 @@ import WorkspacesPage from './pages/WorkspacesPage';
 import TeamPage from './pages/TeamPage';
 import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage';
 import ConnectedAccountsPage from './pages/ConnectedAccountsPage';
+import PostsPage from './pages/PostsPage';
+import PostComposerPage from './pages/PostComposerPage';
 import SocialSelectPage from './pages/SocialSelectPage';
 import SocialOAuthCallbackPage from './pages/SocialOAuthCallbackPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
@@ -90,6 +92,30 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <ConnectedAccountsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/posts"
+              element={
+                <ProtectedRoute>
+                  <PostsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/posts/new"
+              element={
+                <ProtectedRoute>
+                  <PostComposerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/posts/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <PostComposerPage />
                 </ProtectedRoute>
               }
             />

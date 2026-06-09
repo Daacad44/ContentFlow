@@ -17,6 +17,7 @@ import { configurePassport } from './config/passport';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import routes from './routes';
+import { mediaRoutes } from './routes/media.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -60,6 +61,7 @@ export function createApp(): Application {
 
   // --- Global rate limit + routes -----------------------------------------
   app.use('/api', apiLimiter);
+  app.use('/api/v1/media', mediaRoutes);
   app.use('/api/v1', routes);
 
   // --- 404 + error handling ----------------------------------------------

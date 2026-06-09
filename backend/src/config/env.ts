@@ -52,6 +52,8 @@ const envSchema = z.object({
   ZERNIO_API_KEY: z.string().optional().default(''),
   ZERNIO_API_URL: z.string().url().default('https://zernio.com/api/v1'),
   TOKEN_ENCRYPTION_KEY: z.string().optional().default(''),
+  UPLOAD_DIR: z.string().default('./uploads'),
+  MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(25),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -78,6 +80,7 @@ export const env = {
   googleOAuthEnabled: Boolean(data.GOOGLE_CLIENT_ID && data.GOOGLE_CLIENT_SECRET),
   smtpEnabled: Boolean(data.SMTP_HOST && data.SMTP_USER),
   zernioEnabled: Boolean(data.ZERNIO_API_KEY),
+  MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
 };
 
 export type Env = typeof env;

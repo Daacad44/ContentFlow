@@ -6,6 +6,7 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 import { prisma } from './config/prisma';
+import { postSchedulerService } from './services/postScheduler.service';
 
 async function bootstrap() {
   // Verify DB connectivity before accepting traffic.
@@ -18,12 +19,15 @@ async function bootstrap() {
   }
 
   const app = createApp();
+  postSchedulerService.start();
+
   const server = app.listen(env.PORT, () => {
     logger.info(`🚀 ${env.APP_NAME} API listening on ${env.API_URL} (${env.NODE_ENV})`);
   });
 
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully...`);
+    postSchedulerService.stop();
     server.close(async () => {
       await prisma.$disconnect();
       logger.info('Cleanup complete. Bye 👋');
