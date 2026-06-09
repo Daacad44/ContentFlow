@@ -1,6 +1,6 @@
 /**
  * src/pages/ConnectedAccountsPage.tsx
- * Manage Facebook, Instagram, and LinkedIn account connections.
+ * Manage Facebook, Instagram, LinkedIn, and TikTok account connections.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { getApiErrorMessage } from '../lib/api';
 import { socialApi, ConnectedAccount, SocialPlatform, PLATFORM_META } from '../lib/social';
 
-const PLATFORMS: SocialPlatform[] = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN'];
+const PLATFORMS: SocialPlatform[] = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'TIKTOK'];
 
 export default function ConnectedAccountsPage() {
   const { activeWorkspace, permissions } = useWorkspace();
@@ -93,7 +93,7 @@ export default function ConnectedAccountsPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Connected Accounts</h1>
             <p className="mt-1 text-muted">
-              Connect Facebook, Instagram, and LinkedIn to schedule and publish content.
+              Connect Facebook, Instagram, LinkedIn, and TikTok to schedule and publish content.
             </p>
           </div>
           {canSync && (
@@ -112,7 +112,7 @@ export default function ConnectedAccountsPage() {
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
               Connect a platform
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {PLATFORMS.map((platform) => {
                 const connected = accounts.find((a) => a.platform === platform);
                 const disabled =

@@ -4,7 +4,7 @@
  */
 import { api } from './api';
 
-export type SocialPlatform = 'FACEBOOK' | 'INSTAGRAM' | 'LINKEDIN';
+export type SocialPlatform = 'FACEBOOK' | 'INSTAGRAM' | 'LINKEDIN' | 'TIKTOK';
 
 export type SocialAccountStatus =
   | 'CONNECTED'
@@ -35,6 +35,7 @@ export const PLATFORM_META: Record<
   FACEBOOK: { label: 'Facebook', color: '#1877F2', icon: 'f' },
   INSTAGRAM: { label: 'Instagram', color: '#E4405F', icon: 'ig' },
   LINKEDIN: { label: 'LinkedIn', color: '#0A66C2', icon: 'in' },
+  TIKTOK: { label: 'TikTok', color: '#FE2C55', icon: 'tt' },
 };
 
 export const socialApi = {

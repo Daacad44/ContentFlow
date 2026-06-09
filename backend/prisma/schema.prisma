@@ -51,6 +51,7 @@ enum SocialPlatform {
   FACEBOOK
   INSTAGRAM
   LINKEDIN
+  TIKTOK
 }
 
 enum SocialAccountStatus {
