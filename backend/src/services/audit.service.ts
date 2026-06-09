@@ -1,0 +1,64 @@
+/**
+ * src/services/audit.service.ts
+ * Records security-relevant events. Writes are best-effort: a failure to audit
+ * must never break the primary flow, so errors are swallowed and logged.
+ */
+import { Prisma } from '@prisma/client';
+import { prisma } from '../config/prisma';
+import { logger } from '../utils/logger';
+
+export const AUDIT = {
+  REGISTER: 'REGISTER',
+  LOGIN_SUCCESS: 'LOGIN_SUCCESS',
+  LOGIN_FAILED: 'LOGIN_FAILED',
+  LOGIN_LOCKED: 'LOGIN_LOCKED',
+  LOGOUT: 'LOGOUT',
+  TOKEN_REFRESH: 'TOKEN_REFRESH',
+  TOKEN_REUSE_DETECTED: 'TOKEN_REUSE_DETECTED',
+  EMAIL_VERIFIED: 'EMAIL_VERIFIED',
+  PASSWORD_RESET_REQUESTED: 'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_COMPLETED: 'PASSWORD_RESET_COMPLETED',
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED',
+  PROFILE_UPDATED: 'PROFILE_UPDATED',
+  OAUTH_LOGIN: 'OAUTH_LOGIN',
+  ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
+  WORKSPACE_CREATED: 'WORKSPACE_CREATED',
+  WORKSPACE_UPDATED: 'WORKSPACE_UPDATED',
+  WORKSPACE_DELETED: 'WORKSPACE_DELETED',
+  MEMBER_ROLE_UPDATED: 'MEMBER_ROLE_UPDATED',
+  MEMBER_REMOVED: 'MEMBER_REMOVED',
+  MEMBER_LEFT: 'MEMBER_LEFT',
+  OWNERSHIP_TRANSFERRED: 'OWNERSHIP_TRANSFERRED',
+  INVITATION_SENT: 'INVITATION_SENT',
+  INVITATION_RESENT: 'INVITATION_RESENT',
+  INVITATION_REVOKED: 'INVITATION_REVOKED',
+  INVITATION_ACCEPTED: 'INVITATION_ACCEPTED',
+  INVITATION_DECLINED: 'INVITATION_DECLINED',
+  SOCIAL_ACCOUNT_CONNECTED: 'SOCIAL_ACCOUNT_CONNECTED',
+  SOCIAL_ACCOUNT_DISCONNECTED: 'SOCIAL_ACCOUNT_DISCONNECTED',
+  SOCIAL_ACCOUNT_SYNCED: 'SOCIAL_ACCOUNT_SYNCED',
+  SOCIAL_CONNECT_STARTED: 'SOCIAL_CONNECT_STARTED',
+  SOCIAL_TOKEN_EXPIRED: 'SOCIAL_TOKEN_EXPIRED',
+} as const;
+
+export type AuditAction = (typeof AUDIT)[keyof typeof AUDIT];
+
+interface AuditArgs {
+  action: AuditAction;
+  userId?: string | null;
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+export const auditService = {
+  async record({ action, userId, ipAddress, userAgent, metadata }: AuditArgs) {
+    try {
+      await prisma.auditLog.create({
+        data: { action, userId: userId ?? null, ipAddress, userAgent, metadata },
+      });
+    } catch (err) {
+      logger.warn({ err, action }, 'Failed to write audit log');
+    }
+  },
+};

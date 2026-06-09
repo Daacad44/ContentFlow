@@ -1,0 +1,310 @@
+// ----------------------------------------------------------------------------
+// ContentFlow — Authentication & Authorization schema
+// PostgreSQL + Prisma
+// ----------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  DISCONNECTED
+  TOKEN_EXPIRED
+  ERROR
+  PENDING
+}
+
+// ----------------------------------------------------------------------------
+// USER
+// ----------------------------------------------------------------------------
+
+model User {
+  id            String       @id @default(uuid()) @db.Uuid
+  email         String       @unique
+  // Null when the account is OAuth-only and no password has been set.
+  passwordHash  String?
+  fullName      String
+  avatarUrl     String?
+  companyName   String?
+  timezone      String       @default("UTC")
+
+  role          Role         @default(USER)
+  provider      AuthProvider @default(LOCAL)
+  googleId      String?      @unique
+
+  emailVerified Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  profileComplete Boolean    @default(false)
+
+  // Brute-force protection
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  // Invalidate all access tokens issued before this moment (logout-everywhere,
+  // password change, etc.)
+  tokenVersion  Int          @default(0)
+
+  lastLoginAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  refreshTokens         RefreshToken[]
+  verificationTokens    VerificationToken[]
+  auditLogs             AuditLog[]
+  workspaceMemberships  WorkspaceMember[]
+  sentInvitations       WorkspaceInvitation[] @relation("InvitedBy")
+
+  @@index([email])
+  @@index([googleId])
+  @@map("users")
+}
+
+// ----------------------------------------------------------------------------
+// REFRESH TOKEN (rotating, hashed at rest)
+// ----------------------------------------------------------------------------
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // SHA-256 hash of the raw token — the raw value is never stored.
+  tokenHash   String    @unique
+  // Refresh-token rotation: points to the token that replaced this one.
+  replacedById String?  @db.Uuid
+
+  userAgent   String?
+  ipAddress   String?
+
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// VERIFICATION / PASSWORD-RESET TOKENS (hashed at rest, single-use)
+// ----------------------------------------------------------------------------
+
+model VerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  type      TokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("verification_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// AUDIT LOG (security events)
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action    String   // e.g. LOGIN_SUCCESS, LOGIN_FAILED, PASSWORD_CHANGED
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ----------------------------------------------------------------------------
+// WORKSPACE (multi-tenant team container)
+// ----------------------------------------------------------------------------
+
+model Workspace {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  avatarUrl   String?
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members         WorkspaceMember[]
+  invitations     WorkspaceInvitation[]
+  socialProfile   SocialProfile?
+  connectedAccounts ConnectedAccount[]
+
+  @@index([slug])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  userId      String        @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+
+  joinedAt    DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @db.Uuid
+  email       String
+  role        WorkspaceRole    @default(MEMBER)
+  tokenHash   String           @unique
+  invitedById String           @db.Uuid
+  status      InvitationStatus @default(PENDING)
+
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([status])
+  @@map("workspace_invitations")
+}
+
+// ----------------------------------------------------------------------------
+// SOCIAL ACCOUNTS (Zernio integration — workspace-scoped)
+// ----------------------------------------------------------------------------
+
+model SocialProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @unique @db.Uuid
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  zernioProfileId String   @unique
+  name            String
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  connectedAccounts ConnectedAccount[]
+  oauthStates       SocialOAuthState[]
+
+  @@index([zernioProfileId])
+  @@map("social_profiles")
+}
+
+model ConnectedAccount {
+  id                String              @id @default(uuid()) @db.Uuid
+  workspaceId       String              @db.Uuid
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialProfileId   String              @db.Uuid
+  socialProfile     SocialProfile       @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+  platform          SocialPlatform
+  zernioAccountId   String
+  externalAccountId String?
+  displayName       String?
+  username          String?
+  avatarUrl         String?
+  accountType       String?             // page, personal, organization
+  status            SocialAccountStatus @default(CONNECTED)
+  metadata          Json?
+
+  connectedByUserId String?             @db.Uuid
+  connectedAt       DateTime            @default(now())
+  lastSyncedAt      DateTime?
+  disconnectedAt    DateTime?
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([workspaceId, zernioAccountId])
+  @@index([workspaceId])
+  @@index([platform])
+  @@index([status])
+  @@map("connected_accounts")
+}
+
+model SocialOAuthState {
+  id              String         @id @default(uuid()) @db.Uuid
+  socialProfileId String         @db.Uuid
+  socialProfile   SocialProfile  @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+  tokenHash       String         @unique
+  platform        SocialPlatform
+  userId          String         @db.Uuid
+  redirectPath    String?
+
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime       @default(now())
+
+  @@index([tokenHash])
+  @@index([socialProfileId])
+  @@map("social_oauth_states")
+}

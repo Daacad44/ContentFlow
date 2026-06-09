@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-900 text-slate-200 font-sans antialiased;
+  background-image: radial-gradient(
+      1200px 600px at 100% -10%,
+      rgba(255, 122, 26, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(900px 500px at -10% 110%, rgba(56, 130, 246, 0.08), transparent 60%);
+}
+
+@layer components {
+  .cf-input {
+    @apply w-full rounded-xl border border-ink-500 bg-ink-800/70 px-4 py-3 text-sm
+           text-white placeholder:text-muted/60 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand/30;
+  }
+
+  .cf-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-300;
+  }
+
+  .cf-btn-primary {
+    @apply flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3
+           text-sm font-semibold text-white transition hover:bg-brand-600
+           focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:cursor-not-allowed
+           disabled:opacity-60;
+  }
+
+  .cf-btn-ghost {
+    @apply flex w-full items-center justify-center gap-2 rounded-xl border border-ink-500
+           bg-white px-4 py-3 text-sm font-semibold text-ink-900 transition
+           hover:bg-slate-100 disabled:opacity-60;
+  }
+
+  .cf-card {
+    @apply rounded-2xl border border-ink-500/70 bg-ink-700/80 p-7 shadow-2xl backdrop-blur;
+  }
+
+  .cf-error {
+    @apply mt-1 text-xs font-medium text-red-400;
+  }
+}
