@@ -15,8 +15,17 @@ export const authController = {
     return created(
       res,
       { user },
-      'Account created. Check your email to verify your account.',
+      'Account created. Check your email for a 6-digit verification code.',
     );
+  },
+
+  async verifyOtp(req: Request, res: Response) {
+    const { user, accessToken, refreshToken } = await authService.verifyOtp(
+      req.body,
+      getClientContext(req),
+    );
+    setRefreshCookie(res, refreshToken);
+    return ok(res, { user, accessToken }, 'Email verified successfully.');
   },
 
   async login(req: Request, res: Response) {
@@ -51,25 +60,29 @@ export const authController = {
     return ok(res, null, 'Logged out from all devices.');
   },
 
+  /** Legacy link-based verification. */
   async verifyEmail(req: Request, res: Response) {
     const user = await authService.verifyEmail(req.body.token, getClientContext(req));
     return ok(res, { user }, 'Email verified successfully.');
   },
 
   async resendVerification(req: Request, res: Response) {
-    await authService.resendVerification(req.body.email);
-    return ok(res, null, 'If an account exists, a verification email has been sent.');
+    await authService.resendVerificationOtp(req.body.email, getClientContext(req));
+    return ok(res, null, 'If an account exists, a verification code has been sent.');
   },
 
   async forgotPassword(req: Request, res: Response) {
     await authService.forgotPassword(req.body.email, getClientContext(req));
-    return ok(res, null, 'If an account exists, a reset link has been sent.');
+    return ok(res, null, 'If an account exists, a reset code has been sent.');
   },
 
   async resetPassword(req: Request, res: Response) {
-    await authService.resetPassword(
-      req.body.token,
-      req.body.password,
+    await authService.resetPasswordWithOtp(
+      {
+        email: req.body.email,
+        otp: req.body.otp,
+        password: req.body.password,
+      },
       getClientContext(req),
     );
     clearRefreshCookie(res);
@@ -87,20 +100,13 @@ export const authController = {
     return ok(res, null, 'Password changed. Please log in again.');
   },
 
-  /** Current authenticated user (from access token). */
   async me(req: Request, res: Response) {
     const { userService } = await import('../services/user.service');
     const user = await userService.getById(req.user!.id);
     return ok(res, { user }, 'OK');
   },
 
-  /**
-   * Google OAuth callback. Passport populates req.user with our token bundle
-   * (see config/passport.ts). We set the refresh cookie and redirect back to
-   * the client with the access token in the URL fragment.
-   */
   async googleCallback(req: Request, res: Response) {
-    // passport strategy attaches the result on req.authResult
     const result = (req as unknown as { authResult: Awaited<ReturnType<typeof authService.loginWithGoogle>> }).authResult;
     setRefreshCookie(res, result.refreshToken);
     const redirectUrl = `${env.CLIENT_URL}/oauth/callback#access_token=${encodeURIComponent(

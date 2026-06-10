@@ -27,10 +27,28 @@ export const authLimiter = rateLimit({
   handler,
 });
 
-/** Very strict limiter for password reset & verification email sending. */
+/** Very strict limiter for password reset & OTP resend. */
 export const sensitiveLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler,
+});
+
+/** OTP verification — limits brute-force on 6-digit codes. */
+export const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler,
+});
+
+/** OTP resend — per-IP cap in addition to per-user cooldown in otpService. */
+export const otpResendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 8,
   standardHeaders: true,
   legacyHeaders: false,
   handler,

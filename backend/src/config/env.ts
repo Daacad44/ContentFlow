@@ -39,12 +39,21 @@ const envSchema = z.object({
     .string()
     .default('http://localhost:4000/api/v1/auth/google/callback'),
 
+  /** Resend API key — preferred email provider (https://resend.com) */
+  RESEND_API_KEY: z.string().optional().default(''),
+
   SMTP_HOST: z.string().optional().default(''),
   SMTP_PORT: z.coerce.number().int().default(587),
   SMTP_SECURE: booleanString.default('false'),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
-  EMAIL_FROM: z.string().default('ContentFlow <no-reply@contentflow.ai>'),
+  EMAIL_FROM: z.string().default('BotanDev <noreply@botandev.com>'),
+  EMAIL_BRAND_NAME: z.string().default('BotanDev'),
+
+  OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(10),
+  OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  OTP_MAX_VERIFY_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  OTP_PEPPER: z.string().optional().default(''),
 
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   PASSWORD_PEPPER: z.string().optional().default(''),
@@ -96,7 +105,9 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
   googleOAuthEnabled: Boolean(data.GOOGLE_CLIENT_ID && data.GOOGLE_CLIENT_SECRET),
+  resendEnabled: Boolean(data.RESEND_API_KEY),
   smtpEnabled: Boolean(data.SMTP_HOST && data.SMTP_USER),
+  emailEnabled: Boolean(data.RESEND_API_KEY || (data.SMTP_HOST && data.SMTP_USER)),
   zernioEnabled: Boolean(data.ZERNIO_API_KEY),
   redisEnabled: Boolean(data.REDIS_URL),
   geminiEnabled: Boolean(data.GEMINI_API_KEY),

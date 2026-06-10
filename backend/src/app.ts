@@ -17,6 +17,7 @@ import { configurePassport } from './config/passport';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import routes from './routes';
+import authRoutes from './routes/auth.routes';
 import { mediaRoutes } from './routes/media.routes';
 
 export function createApp(): Application {
@@ -63,6 +64,7 @@ export function createApp(): Application {
   app.use('/api', apiLimiter);
   app.use('/api/v1/media', mediaRoutes);
   app.use('/api/v1', routes);
+  app.use('/api/auth', authRoutes);
 
   // --- 404 + error handling ----------------------------------------------
   app.use(notFoundHandler);

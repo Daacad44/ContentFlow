@@ -1,20 +1,26 @@
 /**
  * src/routes/auth.routes.ts
- * Authentication endpoints, mounted at /api/v1/auth.
+ * Authentication endpoints, mounted at /api/v1/auth and /api/auth.
  */
 import { Router } from 'express';
 import passport from 'passport';
 import { authController } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { authLimiter, sensitiveLimiter } from '../middleware/rateLimit.middleware';
+import {
+  authLimiter,
+  sensitiveLimiter,
+  otpVerifyLimiter,
+  otpResendLimiter,
+} from '../middleware/rateLimit.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
 import {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
-  resetPasswordSchema,
+  resetPasswordOtpSchema,
+  verifyOtpSchema,
   verifyEmailSchema,
   resendVerificationSchema,
   changePasswordSchema,
@@ -41,21 +47,30 @@ router.post('/refresh', authLimiter, asyncHandler(authController.refresh));
 
 router.post('/logout', asyncHandler(authController.logout));
 
-// --- Email verification ---------------------------------------------------
+// --- OTP email verification -----------------------------------------------
 router.post(
-  '/verify-email',
-  validate({ body: verifyEmailSchema }),
-  asyncHandler(authController.verifyEmail),
+  '/verify-otp',
+  otpVerifyLimiter,
+  validate({ body: verifyOtpSchema }),
+  asyncHandler(authController.verifyOtp),
 );
 
 router.post(
   '/resend-verification',
-  sensitiveLimiter,
+  otpResendLimiter,
   validate({ body: resendVerificationSchema }),
   asyncHandler(authController.resendVerification),
 );
 
-// --- Password reset -------------------------------------------------------
+/** @deprecated Legacy link verification — prefer POST /verify-otp */
+router.post(
+  '/verify-email',
+  otpVerifyLimiter,
+  validate({ body: verifyEmailSchema }),
+  asyncHandler(authController.verifyEmail),
+);
+
+// --- Password reset (OTP) -------------------------------------------------
 router.post(
   '/forgot-password',
   sensitiveLimiter,
@@ -65,8 +80,8 @@ router.post(
 
 router.post(
   '/reset-password',
-  sensitiveLimiter,
-  validate({ body: resetPasswordSchema }),
+  otpVerifyLimiter,
+  validate({ body: resetPasswordOtpSchema }),
   asyncHandler(authController.resetPassword),
 );
 

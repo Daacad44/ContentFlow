@@ -20,7 +20,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage --runInBand"
+    "test:coverage": "jest --coverage --runInBand",
+    "test:otp": "tsx scripts/test-otp-flow.ts"
   },
   "keywords": [
     "authentication",
@@ -54,6 +55,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
+    "resend": "^6.12.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {

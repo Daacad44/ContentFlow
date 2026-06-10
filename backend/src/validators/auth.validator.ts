@@ -51,7 +51,40 @@ export const forgotPasswordSchema = z.object({
   email: emailSchema,
 });
 
-export const resetPasswordSchema = z
+export const verifyOtpSchema = z.object({
+  email: emailSchema,
+  otp: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Verification code must be exactly 6 digits.'),
+});
+
+export const resendVerificationSchema = z.object({
+  email: emailSchema,
+});
+
+/** Legacy link-based verification (deprecated — use verifyOtpSchema). */
+export const verifyEmailSchema = z.object({
+  token: z.string().min(10, 'Invalid verification token.'),
+});
+
+export const resetPasswordOtpSchema = z
+  .object({
+    email: emailSchema,
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'Reset code must be exactly 6 digits.'),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
+/** Legacy token-based reset (deprecated — use resetPasswordOtpSchema). */
+export const resetPasswordTokenSchema = z
   .object({
     token: z.string().min(10, 'Invalid reset token.'),
     password: passwordSchema,
@@ -61,14 +94,6 @@ export const resetPasswordSchema = z
     message: 'Passwords do not match.',
     path: ['confirmPassword'],
   });
-
-export const verifyEmailSchema = z.object({
-  token: z.string().min(10, 'Invalid verification token.'),
-});
-
-export const resendVerificationSchema = z.object({
-  email: emailSchema,
-});
 
 export const changePasswordSchema = z
   .object({

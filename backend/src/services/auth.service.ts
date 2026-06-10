@@ -3,7 +3,7 @@
  * The heart of the authentication module. Pure business logic: it knows nothing
  * about Express. Controllers translate HTTP <-> these methods.
  */
-import { AuthProvider, Role, TokenType, User } from '@prisma/client';
+import { AuthProvider, OtpPurpose, Role, TokenType, User } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
 import { ApiError } from '../utils/apiError';
@@ -14,12 +14,10 @@ import {
 } from '../utils/password';
 import { signAccessToken } from '../utils/tokens';
 import { tokenService } from './token.service';
-import { emailService } from './email.service';
+import { emailService } from './emailService';
+import { otpService } from './otp.service';
 import { auditService, AUDIT } from './audit.service';
 import { workspaceService } from './workspace.service';
-
-const EMAIL_VERIFY_TTL = 24 * 60 * 60 * 1000; // 24h
-const PASSWORD_RESET_TTL = 60 * 60 * 1000; // 1h
 
 interface ClientContext {
   ipAddress?: string;
@@ -69,7 +67,7 @@ async function issueAuthTokens(user: User, ctx: ClientContext) {
 }
 
 export const authService = {
-  /** REGISTER a new local account and send a verification email. */
+  /** REGISTER — creates inactive account and emails a 6-digit OTP via Resend. */
   async register(
     input: { email: string; password: string; fullName: string },
     ctx: ClientContext,
@@ -77,7 +75,6 @@ export const authService = {
     const email = input.email.toLowerCase().trim();
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      // Do not reveal whether the email exists beyond a generic conflict.
       throw ApiError.conflict('An account with this email already exists.');
     }
 
@@ -88,19 +85,91 @@ export const authService = {
         passwordHash,
         fullName: input.fullName.trim(),
         provider: AuthProvider.LOCAL,
+        emailVerified: false,
+        isActive: false,
       },
     });
 
-    const rawToken = await tokenService.createVerificationToken(
-      user.id,
-      TokenType.EMAIL_VERIFICATION,
-      EMAIL_VERIFY_TTL,
-    );
-    await emailService.sendVerificationEmail(user.email, user.fullName, rawToken);
+    const otp = await otpService.create(user.id, OtpPurpose.EMAIL_VERIFICATION);
+    const mailResult = await emailService.sendVerificationOtp(user.email, user.fullName, otp);
+    if (!mailResult.success && env.isProd) {
+      throw ApiError.internal('Unable to send verification email. Please try again.');
+    }
+
     await workspaceService.createDefaultForUser(user.id, user.fullName);
     await auditService.record({ action: AUDIT.REGISTER, userId: user.id, ...ctx });
 
     return toPublicUser(user);
+  },
+
+  /**
+   * VERIFY OTP — validates email verification code, activates account, issues JWT.
+   */
+  async verifyOtp(
+    input: { email: string; otp: string },
+    ctx: ClientContext,
+  ) {
+    const email = input.email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw ApiError.badRequest('Invalid verification code.');
+    }
+    if (user.emailVerified) {
+      throw ApiError.badRequest('This email is already verified.');
+    }
+
+    const result = await otpService.verify(
+      user.id,
+      input.otp,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
+
+    if (!result.ok) {
+      await auditService.record({
+        action: AUDIT.OTP_VERIFY_FAILED,
+        userId: user.id,
+        metadata: { reason: result.reason, purpose: 'EMAIL_VERIFICATION' },
+        ...ctx,
+      });
+      if (result.reason === 'EXPIRED') {
+        throw ApiError.badRequest('Verification code has expired. Request a new one.');
+      }
+      if (result.reason === 'LOCKED') {
+        throw ApiError.tooMany('Too many failed attempts. Request a new verification code.');
+      }
+      throw ApiError.badRequest('Invalid verification code.');
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true, isActive: true },
+    });
+
+    await emailService.sendWelcomeEmail(updated.email, updated.fullName);
+    await auditService.record({ action: AUDIT.EMAIL_VERIFIED, userId: user.id, ...ctx });
+
+    const tokens = await issueAuthTokens(updated, ctx);
+    return { user: toPublicUser(updated), ...tokens };
+  },
+
+  /** Resend verification OTP (cooldown enforced in otpService). */
+  async resendVerificationOtp(email: string, ctx: ClientContext) {
+    const normalized = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
+    if (user && !user.emailVerified) {
+      await otpService.assertResendAllowed(user.id, OtpPurpose.EMAIL_VERIFICATION);
+      const otp = await otpService.create(user.id, OtpPurpose.EMAIL_VERIFICATION);
+      const mailResult = await emailService.sendVerificationOtp(user.email, user.fullName, otp);
+      if (!mailResult.success && env.isProd) {
+        throw ApiError.internal('Unable to send verification email.');
+      }
+      await auditService.record({
+        action: AUDIT.OTP_RESENT,
+        userId: user.id,
+        metadata: { purpose: 'EMAIL_VERIFICATION' },
+        ...ctx,
+      });
+    }
   },
 
   /** LOGIN with email + password. Implements lockout after repeated failures. */
@@ -233,36 +302,21 @@ export const authService = {
 
     const user = await prisma.user.update({
       where: { id: result.userId },
-      data: { emailVerified: true },
+      data: { emailVerified: true, isActive: true },
     });
     await emailService.sendWelcomeEmail(user.email, user.fullName);
     await auditService.record({ action: AUDIT.EMAIL_VERIFIED, userId: user.id, ...ctx });
     return toPublicUser(user);
   },
 
-  /** Resend verification email (idempotent, generic response). */
-  async resendVerification(email: string) {
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-    if (user && !user.emailVerified) {
-      const rawToken = await tokenService.createVerificationToken(
-        user.id,
-        TokenType.EMAIL_VERIFICATION,
-        EMAIL_VERIFY_TTL,
-      );
-      await emailService.sendVerificationEmail(user.email, user.fullName, rawToken);
-    }
-  },
-
-  /** FORGOT PASSWORD: always returns success to prevent user enumeration. */
+  /** FORGOT PASSWORD — sends a 6-digit reset OTP via Resend. */
   async forgotPassword(email: string, ctx: ClientContext) {
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-    if (user && user.isActive && user.passwordHash) {
-      const rawToken = await tokenService.createVerificationToken(
-        user.id,
-        TokenType.PASSWORD_RESET,
-        PASSWORD_RESET_TTL,
-      );
-      await emailService.sendPasswordResetEmail(user.email, user.fullName, rawToken);
+    const normalized = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
+    if (user && user.passwordHash) {
+      await otpService.assertResendAllowed(user.id, OtpPurpose.PASSWORD_RESET);
+      const otp = await otpService.create(user.id, OtpPurpose.PASSWORD_RESET);
+      await emailService.sendPasswordResetOtp(user.email, user.fullName, otp);
       await auditService.record({
         action: AUDIT.PASSWORD_RESET_REQUESTED,
         userId: user.id,
@@ -271,22 +325,44 @@ export const authService = {
     }
   },
 
-  /** RESET PASSWORD using a token. Revokes all sessions afterward. */
-  async resetPassword(rawToken: string, newPassword: string, ctx: ClientContext) {
-    const result = await tokenService.consumeVerificationToken(
-      rawToken,
-      TokenType.PASSWORD_RESET,
-    );
-    if (!result.ok) throw ApiError.badRequest('Invalid or expired reset link.');
+  /** RESET PASSWORD using email + OTP. Revokes all sessions afterward. */
+  async resetPasswordWithOtp(
+    input: { email: string; otp: string; password: string },
+    ctx: ClientContext,
+  ) {
+    const email = input.email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw ApiError.badRequest('Invalid reset code.');
+    }
 
-    const passwordHash = await hashPassword(newPassword);
-    const user = await prisma.user.update({
-      where: { id: result.userId },
+    const result = await otpService.verify(user.id, input.otp, OtpPurpose.PASSWORD_RESET);
+    if (!result.ok) {
+      await auditService.record({
+        action: AUDIT.OTP_VERIFY_FAILED,
+        userId: user.id,
+        metadata: { reason: result.reason, purpose: 'PASSWORD_RESET' },
+        ...ctx,
+      });
+      if (result.reason === 'EXPIRED') {
+        throw ApiError.badRequest('Reset code has expired. Request a new one.');
+      }
+      if (result.reason === 'LOCKED') {
+        throw ApiError.tooMany('Too many failed attempts. Request a new reset code.');
+      }
+      throw ApiError.badRequest('Invalid reset code.');
+    }
+
+    const passwordHash = await hashPassword(input.password);
+    await prisma.user.update({
+      where: { id: user.id },
       data: {
         passwordHash,
         tokenVersion: { increment: 1 },
         failedLoginAttempts: 0,
         lockedUntil: null,
+        isActive: true,
+        emailVerified: true,
       },
     });
     await tokenService.revokeAllForUser(user.id);

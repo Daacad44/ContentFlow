@@ -1,11 +1,18 @@
-import { Button } from '@/components/ui/button';
+'use client';
 
-/** "Continue with Google" white button with the official multicolor G. */
+import { Button } from '@/components/ui/button';
+import { getApiUrl } from '@/lib/api';
+
+/** "Continue with Google" — redirects to backend OAuth flow. */
 export function GoogleButton({ children = 'Continue with Google' }: { children?: string }) {
+  const href = `${getApiUrl()}/auth/google`;
+
   return (
-    <Button type="button" variant="google" className="w-full">
-      <GoogleIcon />
-      {children}
+    <Button type="button" variant="google" className="w-full" asChild>
+      <a href={href}>
+        <GoogleIcon />
+        {children}
+      </a>
     </Button>
   );
 }

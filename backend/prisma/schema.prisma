@@ -32,6 +32,11 @@ enum TokenType {
   PASSWORD_RESET
 }
 
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 enum WorkspaceRole {
   OWNER
   ADMIN
@@ -139,6 +144,7 @@ model User {
 
   refreshTokens         RefreshToken[]
   verificationTokens    VerificationToken[]
+  otpCodes              OtpCode[]
   auditLogs             AuditLog[]
   workspaceMemberships  WorkspaceMember[]
   sentInvitations       WorkspaceInvitation[] @relation("InvitedBy")
@@ -196,6 +202,27 @@ model VerificationToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("verification_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// OTP CODES (6-digit, hashed at rest, single-use, 10-minute TTL)
+// ----------------------------------------------------------------------------
+
+model OtpCode {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @db.Uuid
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash  String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("otp_codes")
 }
 
 // ----------------------------------------------------------------------------
