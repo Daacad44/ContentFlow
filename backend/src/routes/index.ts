@@ -8,6 +8,10 @@ import userRoutes from './user.routes';
 import workspaceRoutes from './workspace.routes';
 import invitationRoutes from './invitation.routes';
 import { socialPublicRoutes } from './social.routes';
+import activityLogRoutes from './activityLog.routes';
+import notificationRoutes from './notification.routes';
+import billingRoutes from './billing.routes';
+import adminRoutes from './admin.routes';
 
 const router = Router();
 
@@ -20,5 +24,9 @@ router.use('/users', userRoutes);
 router.use('/workspaces', workspaceRoutes);
 router.use('/invitations', invitationRoutes);
 router.use('/social', socialPublicRoutes);
+router.use('/activity-logs', activityLogRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/billing', billingRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

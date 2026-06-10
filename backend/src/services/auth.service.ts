@@ -16,7 +16,9 @@ import { signAccessToken } from '../utils/tokens';
 import { tokenService } from './token.service';
 import { emailService } from './emailService';
 import { otpService } from './otp.service';
+import { AuditCategory, AuditSeverity } from '@prisma/client';
 import { auditService, AUDIT } from './audit.service';
+import { activityLogService } from './activityLog.service';
 import { workspaceService } from './workspace.service';
 
 interface ClientContext {
@@ -184,7 +186,13 @@ export const authService = {
     const invalid = () => ApiError.unauthorized('Invalid email or password.');
 
     if (!user || !user.passwordHash) {
-      await auditService.record({ action: AUDIT.LOGIN_FAILED, ...ctx, metadata: { email } });
+      await auditService.record({
+        action: AUDIT.LOGIN_FAILED,
+        category: AuditCategory.SECURITY,
+        severity: AuditSeverity.WARN,
+        ...ctx,
+        metadata: { email },
+      });
       throw invalid();
     }
 
@@ -220,7 +228,20 @@ export const authService = {
             : null,
         },
       });
-      await auditService.record({ action: AUDIT.LOGIN_FAILED, userId: user.id, ...ctx });
+      await auditService.record({
+        action: AUDIT.LOGIN_FAILED,
+        userId: user.id,
+        category: AuditCategory.SECURITY,
+        severity: AuditSeverity.WARN,
+        ...ctx,
+      });
+      await activityLogService.recordLoginAttempt({
+        userId: user.id,
+        success: false,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+        failureReason: 'invalid_password',
+      });
       throw invalid();
     }
 
@@ -240,7 +261,18 @@ export const authService = {
     });
 
     const tokens = await issueAuthTokens(current, ctx);
-    await auditService.record({ action: AUDIT.LOGIN_SUCCESS, userId: current.id, ...ctx });
+    await auditService.record({
+      action: AUDIT.LOGIN_SUCCESS,
+      userId: current.id,
+      category: AuditCategory.SECURITY,
+      ...ctx,
+    });
+    await activityLogService.recordLoginAttempt({
+      userId: current.id,
+      success: true,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
     return { user: toPublicUser(current), ...tokens };
   },
 

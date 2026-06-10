@@ -21,6 +21,18 @@ export const PERMISSIONS = {
   USER_UPDATE_ROLE: 'user:update_role',
   USER_DEACTIVATE: 'user:deactivate',
   AUDIT_READ: 'audit:read',
+  // Analytics (platform)
+  ANALYTICS_READ: 'analytics:read',
+  // Notifications (platform)
+  NOTIFICATION_MANAGE: 'notification:manage',
+  // Billing (platform)
+  BILLING_MANAGE: 'billing:manage',
+  // Admin panel
+  ADMIN_DASHBOARD: 'admin:dashboard',
+  ADMIN_SETTINGS: 'admin:settings',
+  ADMIN_MONITORING: 'admin:monitoring',
+  ADMIN_REPORTS: 'admin:reports',
+  REVENUE_READ: 'revenue:read',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -40,11 +52,19 @@ const ADMIN_PERMISSIONS: Permission[] = [
   PERMISSIONS.USER_LIST,
   PERMISSIONS.USER_DEACTIVATE,
   PERMISSIONS.AUDIT_READ,
+  PERMISSIONS.ANALYTICS_READ,
+  PERMISSIONS.ADMIN_DASHBOARD,
+  PERMISSIONS.ADMIN_MONITORING,
+  PERMISSIONS.ADMIN_REPORTS,
+  PERMISSIONS.REVENUE_READ,
 ];
 
 const SUPER_ADMIN_PERMISSIONS: Permission[] = [
   ...ADMIN_PERMISSIONS,
   PERMISSIONS.USER_UPDATE_ROLE,
+  PERMISSIONS.NOTIFICATION_MANAGE,
+  PERMISSIONS.BILLING_MANAGE,
+  PERMISSIONS.ADMIN_SETTINGS,
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {

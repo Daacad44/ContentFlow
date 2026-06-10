@@ -28,6 +28,16 @@ import PublishingLogsPage from './pages/PublishingLogsPage';
 import SocialSelectPage from './pages/SocialSelectPage';
 import SocialOAuthCallbackPage from './pages/SocialOAuthCallbackPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import NotificationsPage from './pages/NotificationsPage';
+import BillingPage from './pages/BillingPage';
+import ActivityLogsPage from './pages/ActivityLogsPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminRevenuePage from './pages/admin/AdminRevenuePage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
+import AdminMonitoringPage from './pages/admin/AdminMonitoringPage';
+import AdminReportsPage from './pages/admin/AdminReportsPage';
 
 export default function App() {
   return (
@@ -162,6 +172,16 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+            <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
+            <Route path="/activity-logs" element={<ProtectedRoute><ActivityLogsPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute minRole="ADMIN"><AdminDashboardPage /></ProtectedRoute>} />
+            <Route path="/admin/users" element={<ProtectedRoute minRole="ADMIN"><AdminUsersPage /></ProtectedRoute>} />
+            <Route path="/admin/revenue" element={<ProtectedRoute minRole="ADMIN"><AdminRevenuePage /></ProtectedRoute>} />
+            <Route path="/admin/settings" element={<ProtectedRoute minRole="SUPER_ADMIN"><AdminSettingsPage /></ProtectedRoute>} />
+            <Route path="/admin/monitoring" element={<ProtectedRoute minRole="ADMIN"><AdminMonitoringPage /></ProtectedRoute>} />
+            <Route path="/admin/reports" element={<ProtectedRoute minRole="ADMIN"><AdminReportsPage /></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>

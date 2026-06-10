@@ -21,6 +21,10 @@ import { postWorkspaceRoutes } from './post.routes';
 import { publishWorkspaceRoutes } from './publish.routes';
 import { aiWorkspaceRoutes } from './ai.routes';
 import { creativeWorkspaceRoutes } from './creative.routes';
+import { analyticsWorkspaceRoutes } from './analytics.routes';
+import { workspaceNotificationRoutes } from './notification.routes';
+import { workspaceBillingRoutes } from './billing.routes';
+import { workspaceActivityRoutes } from './activityLog.routes';
 import {
   workspaceIdParamSchema,
   memberIdParamSchema,
@@ -162,5 +166,17 @@ router.use('/:workspaceId/ai', aiWorkspaceRoutes);
 
 // --- Creative studio (Cloudinary) -------------------------------------------
 router.use('/:workspaceId/creative', creativeWorkspaceRoutes);
+
+// --- Analytics (Agent 08) ---------------------------------------------------
+router.use('/:workspaceId/analytics', analyticsWorkspaceRoutes);
+
+// --- Notifications (Agent 09) -----------------------------------------------
+router.use('/:workspaceId/notifications', workspaceNotificationRoutes);
+
+// --- Billing (Agent 10) -----------------------------------------------------
+router.use('/:workspaceId/billing', workspaceBillingRoutes);
+
+// --- Activity logs (Agent 12) -----------------------------------------------
+router.use('/:workspaceId/activity-logs', workspaceActivityRoutes);
 
 export default router;

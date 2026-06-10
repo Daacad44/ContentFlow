@@ -221,6 +221,29 @@ export const emailService = {
     });
   },
 
+  async sendNotificationEmail(
+    to: string,
+    name: string,
+    title: string,
+    body: string,
+    actionUrl?: string,
+  ): Promise<EmailResult> {
+    const link = actionUrl ? `<a href="${actionUrl}" style="color:#FF8A00">View details</a>` : '';
+    const html = `<!DOCTYPE html><html><body style="background:#020817;color:#fff;font-family:Inter,sans-serif;padding:40px">
+      <div style="max-width:480px;margin:0 auto;background:#0F172A;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.08)">
+        <h2 style="color:#FF8A00;margin:0 0 12px">${title}</h2>
+        <p style="color:#94A3B8">Hi ${name},</p>
+        <p style="color:#94A3B8">${body}</p>
+        ${link}
+      </div></body></html>`;
+    return deliver({
+      to,
+      subject: `${BRAND}: ${title}`,
+      text: `Hi ${name}, ${title}: ${body}${actionUrl ? ` — ${actionUrl}` : ''}`,
+      html,
+    });
+  },
+
   /** Workspace invitation (legacy link-based). */
   async sendWorkspaceInvitationEmail(
     to: string,

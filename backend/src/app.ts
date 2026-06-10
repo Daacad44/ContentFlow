@@ -46,6 +46,8 @@ export function createApp(): Application {
   );
 
   // --- Body parsing & hardening -------------------------------------------
+  // Stripe webhooks require the raw body for signature verification.
+  app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(express.urlencoded({ extended: true, limit: '10kb' }));
   app.use(cookieParser());

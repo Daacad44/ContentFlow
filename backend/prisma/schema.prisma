@@ -108,6 +108,102 @@ enum CreativeAssetType {
   SOCIAL_CREATIVE
 }
 
+// Agent 08 — Analytics
+enum AnalyticsMetricType {
+  ENGAGEMENT
+  REACH
+  GROWTH
+  PERFORMANCE
+}
+
+enum AnalyticsPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ReportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// Agent 09 — Notifications
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+enum NotificationCategory {
+  POST
+  PUBLISH
+  TEAM
+  BILLING
+  SECURITY
+  SYSTEM
+  ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// Agent 10 — Billing
+enum PlanInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  INCOMPLETE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum UsageMetric {
+  POSTS
+  AI_GENERATIONS
+  CREATIVE_ASSETS
+  PUBLISH_JOBS
+  TEAM_MEMBERS
+}
+
+// Agent 12 — Activity Logs
+enum AuditCategory {
+  SECURITY
+  USER_ACTIVITY
+  SYSTEM
+  BILLING
+  ADMIN
+}
+
+enum AuditSeverity {
+  INFO
+  WARN
+  ERROR
+  CRITICAL
+}
+
 // ----------------------------------------------------------------------------
 // USER
 // ----------------------------------------------------------------------------
@@ -146,6 +242,11 @@ model User {
   verificationTokens    VerificationToken[]
   otpCodes              OtpCode[]
   auditLogs             AuditLog[]
+  loginHistory          LoginHistory[]
+  notifications         Notification[]
+  notificationPreferences NotificationPreference[]
+  alertRules            AlertRule[]
+  analyticsReports      AnalyticsReport[]
   workspaceMemberships  WorkspaceMember[]
   sentInvitations       WorkspaceInvitation[] @relation("InvitedBy")
   posts                 Post[]
@@ -230,19 +331,28 @@ model OtpCode {
 // ----------------------------------------------------------------------------
 
 model AuditLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String?  @db.Uuid
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String?        @db.Uuid
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspaceId  String?        @db.Uuid
+  workspace    Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
-  action    String   // e.g. LOGIN_SUCCESS, LOGIN_FAILED, PASSWORD_CHANGED
-  ipAddress String?
-  userAgent String?
-  metadata  Json?
+  action       String
+  category     AuditCategory  @default(USER_ACTIVITY)
+  severity     AuditSeverity  @default(INFO)
+  resourceType String?
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
 
-  createdAt DateTime @default(now())
+  createdAt    DateTime       @default(now())
 
   @@index([userId])
+  @@index([workspaceId])
   @@index([action])
+  @@index([category])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -272,6 +382,15 @@ model Workspace {
   brandKit        BrandKit?
   brandTemplates  BrandTemplate[]
   creativeAssets  CreativeAsset[]
+  auditLogs       AuditLog[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  analyticsReports AnalyticsReport[]
+  notifications   Notification[]
+  alertRules      AlertRule[]
+  subscription    Subscription?
+  invoices        Invoice[]
+  payments        Payment[]
+  usageRecords    UsageRecord[]
 
   @@index([slug])
   @@map("workspaces")
@@ -616,4 +735,273 @@ model PostTarget {
   @@index([postId])
   @@index([connectedAccountId])
   @@map("post_targets")
+}
+
+// ----------------------------------------------------------------------------
+// AGENT 08 — ANALYTICS
+// ----------------------------------------------------------------------------
+
+model AnalyticsSnapshot {
+  id                 String              @id @default(uuid()) @db.Uuid
+  workspaceId        String              @db.Uuid
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedAccountId String?             @db.Uuid
+
+  metricType         AnalyticsMetricType
+  period             AnalyticsPeriod
+  periodStart        DateTime
+  periodEnd          DateTime
+  metrics            Json
+
+  createdAt          DateTime            @default(now())
+
+  @@unique([workspaceId, connectedAccountId, metricType, periodStart])
+  @@index([workspaceId, metricType])
+  @@index([periodStart])
+  @@map("analytics_snapshots")
+}
+
+model AnalyticsReport {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String?       @db.Uuid
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  title       String
+  type        String
+  format      String        @default("json")
+  status      ReportStatus  @default(PENDING)
+  data        Json?
+  fileUrl     String?
+  periodStart DateTime
+  periodEnd   DateTime
+
+  createdAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("analytics_reports")
+}
+
+// ----------------------------------------------------------------------------
+// AGENT 09 — NOTIFICATIONS
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id          String               @id @default(uuid()) @db.Uuid
+  userId      String               @db.Uuid
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?              @db.Uuid
+  workspace   Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  category    NotificationCategory
+  title       String
+  body        String
+  priority    NotificationPriority @default(NORMAL)
+  channel     NotificationChannel  @default(IN_APP)
+  readAt      DateTime?
+  actionUrl   String?
+  metadata    Json?
+
+  createdAt   DateTime             @default(now())
+
+  @@index([userId, readAt])
+  @@index([workspaceId])
+  @@index([category])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @db.Uuid
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId  String?              @db.Uuid
+
+  category     NotificationCategory
+  emailEnabled Boolean              @default(true)
+  inAppEnabled Boolean              @default(true)
+
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([userId, workspaceId, category])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+model AlertRule {
+  id              String    @id @default(uuid()) @db.Uuid
+  workspaceId     String    @db.Uuid
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId          String    @db.Uuid
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  metric          String
+  condition       String
+  threshold       Float
+  isActive        Boolean   @default(true)
+  lastTriggeredAt DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([isActive])
+  @@map("alert_rules")
+}
+
+// ----------------------------------------------------------------------------
+// AGENT 10 — BILLING
+// ----------------------------------------------------------------------------
+
+model Plan {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String
+  slug            String       @unique
+  description     String?
+  stripePriceId   String?
+  stripeProductId String?
+  interval        PlanInterval
+  priceCents      Int
+  currency        String       @default("usd")
+  features        Json
+  isActive        Boolean      @default(true)
+  sortOrder       Int          @default(0)
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  subscriptions   Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  workspaceId          String             @unique @db.Uuid
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  planId               String             @db.Uuid
+  plan                 Plan               @relation(fields: [planId], references: [id])
+
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  trialEnd             DateTime?
+
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  invoices             Invoice[]
+
+  @@index([planId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id              String        @id @default(uuid()) @db.Uuid
+  workspaceId     String        @db.Uuid
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subscriptionId  String?       @db.Uuid
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  stripeInvoiceId String?       @unique
+  number          String?
+  status          InvoiceStatus @default(OPEN)
+  amountCents     Int
+  currency        String        @default("usd")
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  paidAt          DateTime?
+  invoiceUrl      String?
+  pdfUrl          String?
+
+  createdAt       DateTime      @default(now())
+
+  payments        Payment[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  workspaceId     String        @db.Uuid
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoiceId       String?       @db.Uuid
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  stripePaymentId String?       @unique
+  amountCents     Int
+  currency        String        @default("usd")
+  status          PaymentStatus @default(PENDING)
+  paymentMethod   String?
+
+  createdAt       DateTime      @default(now())
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("payments")
+}
+
+model UsageRecord {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @db.Uuid
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  metric      UsageMetric
+  quantity    Int         @default(0)
+  periodStart DateTime
+  periodEnd   DateTime
+  metadata    Json?
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([workspaceId, metric, periodStart])
+  @@index([workspaceId, metric])
+  @@map("usage_records")
+}
+
+// ----------------------------------------------------------------------------
+// AGENT 11 — ADMIN (system settings)
+// ----------------------------------------------------------------------------
+
+model SystemSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?  @db.Uuid
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("system_settings")
+}
+
+// ----------------------------------------------------------------------------
+// AGENT 12 — ACTIVITY LOGS (login history)
+// ----------------------------------------------------------------------------
+
+model LoginHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  success       Boolean
+  ipAddress     String?
+  userAgent     String?
+  location      String?
+  failureReason String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([success])
+  @@map("login_history")
 }

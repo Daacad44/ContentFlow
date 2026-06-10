@@ -3,7 +3,7 @@
  * Records security-relevant events. Writes are best-effort: a failure to audit
  * must never break the primary flow, so errors are swallowed and logged.
  */
-import { Prisma } from '@prisma/client';
+import { AuditCategory, AuditSeverity, Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 
@@ -52,6 +52,20 @@ export const AUDIT = {
   AI_CONTENT_GENERATED: 'AI_CONTENT_GENERATED',
   CREATIVE_ASSET_CREATED: 'CREATIVE_ASSET_CREATED',
   BRAND_KIT_UPDATED: 'BRAND_KIT_UPDATED',
+  // Agent 08 — Analytics
+  ANALYTICS_REPORT_GENERATED: 'ANALYTICS_REPORT_GENERATED',
+  // Agent 09 — Notifications
+  NOTIFICATION_SENT: 'NOTIFICATION_SENT',
+  ALERT_TRIGGERED: 'ALERT_TRIGGERED',
+  // Agent 10 — Billing
+  SUBSCRIPTION_CREATED: 'SUBSCRIPTION_CREATED',
+  SUBSCRIPTION_UPDATED: 'SUBSCRIPTION_UPDATED',
+  SUBSCRIPTION_CANCELLED: 'SUBSCRIPTION_CANCELLED',
+  PAYMENT_SUCCEEDED: 'PAYMENT_SUCCEEDED',
+  PAYMENT_FAILED: 'PAYMENT_FAILED',
+  // Agent 11 — Admin
+  SYSTEM_SETTING_UPDATED: 'SYSTEM_SETTING_UPDATED',
+  USER_ROLE_CHANGED: 'USER_ROLE_CHANGED',
 } as const;
 
 export type AuditAction = (typeof AUDIT)[keyof typeof AUDIT];
@@ -59,16 +73,43 @@ export type AuditAction = (typeof AUDIT)[keyof typeof AUDIT];
 interface AuditArgs {
   action: AuditAction;
   userId?: string | null;
+  workspaceId?: string | null;
+  category?: AuditCategory;
+  severity?: AuditSeverity;
+  resourceType?: string;
+  resourceId?: string;
   ipAddress?: string;
   userAgent?: string;
   metadata?: Prisma.InputJsonValue;
 }
 
 export const auditService = {
-  async record({ action, userId, ipAddress, userAgent, metadata }: AuditArgs) {
+  async record({
+    action,
+    userId,
+    workspaceId,
+    category = AuditCategory.USER_ACTIVITY,
+    severity = AuditSeverity.INFO,
+    resourceType,
+    resourceId,
+    ipAddress,
+    userAgent,
+    metadata,
+  }: AuditArgs) {
     try {
       await prisma.auditLog.create({
-        data: { action, userId: userId ?? null, ipAddress, userAgent, metadata },
+        data: {
+          action,
+          userId: userId ?? null,
+          workspaceId: workspaceId ?? null,
+          category,
+          severity,
+          resourceType,
+          resourceId,
+          ipAddress,
+          userAgent,
+          metadata,
+        },
       });
     } catch (err) {
       logger.warn({ err, action }, 'Failed to write audit log');

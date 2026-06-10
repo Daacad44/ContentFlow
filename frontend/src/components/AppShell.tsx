@@ -8,17 +8,30 @@ import toast from 'react-hot-toast';
 import { Logo } from './Logo';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useAuth } from '../context/AuthContext';
+import { NotificationBell } from './NotificationBell';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/posts', label: 'Posts' },
+  { to: '/analytics', label: 'Analytics' },
   { to: '/ai-content', label: 'AI Content' },
   { to: '/studio', label: 'Studio' },
   { to: '/publishing', label: 'Publishing' },
   { to: '/accounts', label: 'Accounts' },
+  { to: '/notifications', label: 'Notifications' },
+  { to: '/billing', label: 'Billing' },
+  { to: '/activity-logs', label: 'Activity' },
   { to: '/workspaces', label: 'Workspaces' },
   { to: '/team', label: 'Team' },
   { to: '/workspace/settings', label: 'Settings' },
+];
+
+const ADMIN_NAV = [
+  { to: '/admin', label: 'Admin' },
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/revenue', label: 'Revenue' },
+  { to: '/admin/monitoring', label: 'Monitoring' },
+  { to: '/admin/reports', label: 'Reports' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -63,6 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <WorkspaceSwitcher />
             <span className="hidden text-sm text-muted lg:inline">{user?.email}</span>
             <button
@@ -74,6 +88,26 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+
+      {user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') && (
+        <div className="border-b border-ink-500/40 bg-ink-900/50">
+          <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-6 py-2">
+            {ADMIN_NAV.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs font-medium ${
+                  location.pathname.startsWith(item.to)
+                    ? 'bg-amber-500/15 text-amber-400'
+                    : 'text-muted hover:bg-ink-700'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
     </div>
