@@ -27,8 +27,10 @@ export default function RegisterPage() {
   const onSubmit = async (values: RegisterValues) => {
     try {
       await registerUser(values);
-      toast.success('Account created! Check your email to verify.');
-      navigate('/verify-email', { state: { email: values.email } });
+      toast.success('Account created! Check your email for a 6-digit code.');
+      navigate(`/verify-email?email=${encodeURIComponent(values.email)}`, {
+        state: { email: values.email },
+      });
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Unable to create account.'));
     }

@@ -11,6 +11,7 @@ import { forgotPasswordSchema, ForgotPasswordValues } from '../lib/validation';
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
+  const [sentEmail, setSentEmail] = useState('');
   const {
     register,
     handleSubmit,
@@ -20,6 +21,7 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (values: ForgotPasswordValues) => {
     try {
       await api.post('/auth/forgot-password', values);
+      setSentEmail(values.email);
       setSent(true);
     } catch (err) {
       toast.error(getApiErrorMessage(err));
@@ -37,8 +39,14 @@ export default function ForgotPasswordPage() {
         <div className="mt-7 rounded-xl border border-brand/30 bg-brand/10 p-4 text-sm text-slate-200">
           <p className="font-medium text-white">Check your inbox 📬</p>
           <p className="mt-1 text-muted">
-            We&apos;ll send a password reset link to your email address if an account exists.
+            If an account exists, a 6-digit reset code was sent to your email.
           </p>
+          <Link
+            to={`/reset-password?email=${encodeURIComponent(sentEmail)}`}
+            className="mt-3 inline-block font-semibold text-brand hover:underline"
+          >
+            Enter reset code →
+          </Link>
         </div>
       ) : (
         <form className="mt-7 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -51,7 +59,7 @@ export default function ForgotPasswordPage() {
             {...register('email')}
           />
           <button type="submit" className="cf-btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Sending…' : 'Send Reset Link'}
+            {isSubmitting ? 'Sending…' : 'Send Reset Code'}
           </button>
         </form>
       )}

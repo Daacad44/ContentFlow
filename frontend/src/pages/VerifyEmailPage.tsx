@@ -1,50 +1,60 @@
-/** src/pages/VerifyEmailPage.tsx — screen 05 from the design. */
-import { useEffect, useRef, useState } from 'react';
+/** src/pages/VerifyEmailPage.tsx — OTP email verification (6-digit code). */
+import { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AuthLayout } from '../components/AuthLayout';
-import { api, getApiErrorMessage } from '../lib/api';
-
-type Status = 'idle' | 'verifying' | 'success' | 'error';
+import { Field } from '../components/Field';
+import { api, getApiErrorMessage, tokenStore } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function VerifyEmailPage() {
   const [params] = useSearchParams();
-  const token = params.get('token');
   const location = useLocation();
   const navigate = useNavigate();
-  const email = (location.state as { email?: string })?.email;
+  const { refreshUser } = useAuth();
 
-  const [status, setStatus] = useState<Status>(token ? 'verifying' : 'idle');
+  const emailFromQuery = params.get('email') ?? '';
+  const emailFromState = (location.state as { email?: string })?.email ?? '';
+  const [email, setEmail] = useState(emailFromQuery || emailFromState);
+  const [otp, setOtp] = useState('');
+  const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const ran = useRef(false);
+  const [success, setSuccess] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!token || ran.current) return;
-    ran.current = true;
-    (async () => {
-      try {
-        await api.post('/auth/verify-email', { token });
-        setStatus('success');
-        toast.success('Email verified!');
-        setTimeout(() => navigate('/login', { replace: true }), 2500);
-      } catch (err) {
-        setStatus('error');
-        toast.error(getApiErrorMessage(err, 'Verification failed.'));
-      }
-    })();
-  }, [token, navigate]);
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await api.post('/auth/verify-otp', { email, otp });
+      tokenStore.set(data.data.accessToken);
+      await refreshUser();
+      setSuccess(true);
+      toast.success('Email verified!');
+      setTimeout(() => navigate('/complete-profile', { replace: true }), 1500);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Verification failed.'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const resend = async () => {
     if (!email) {
-      toast.error('Enter your email on the login page to resend.');
+      setError('Enter your email address first.');
       return;
     }
     setResending(true);
+    setError('');
+    setMessage('');
     try {
       await api.post('/auth/resend-verification', { email });
-      toast.success('Verification email sent.');
+      setMessage('A new verification code was sent to your email.');
+      toast.success('Verification code sent.');
     } catch (err) {
-      toast.error(getApiErrorMessage(err));
+      setError(getApiErrorMessage(err));
     } finally {
       setResending(false);
     }
@@ -57,36 +67,65 @@ export default function VerifyEmailPage() {
           📨
         </div>
         <h1 className="mt-5 text-2xl font-bold text-white">
-          {status === 'success' ? 'Email Verified ✅' : 'Verify Your Email 📩'}
+          {success ? 'Email Verified ✅' : 'Verify Your Email 📩'}
         </h1>
 
-        {status === 'verifying' && (
-          <p className="mt-2 text-sm text-muted">Verifying your email, please wait…</p>
-        )}
-
-        {status === 'success' && (
-          <p className="mt-2 text-sm text-muted">
-            Your account is now active. Redirecting you to sign in…
-          </p>
-        )}
-
-        {(status === 'idle' || status === 'error') && (
+        {success ? (
+          <p className="mt-2 text-sm text-muted">Redirecting you…</p>
+        ) : (
           <>
             <p className="mt-2 text-sm text-muted">
-              We have sent a verification link to{' '}
-              <span className="font-medium text-brand">{email ?? 'your email'}</span>.
-            </p>
-            <p className="mt-3 text-sm text-muted">
-              Please check your inbox and click the verification link to activate your account.
+              Enter the 6-digit code sent to{' '}
+              <span className="font-medium text-brand">{email || 'your email'}</span>
             </p>
 
-            <p className="mt-6 text-sm text-muted">Didn&apos;t receive the email?</p>
+            {error && (
+              <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {error}
+              </p>
+            )}
+            {message && (
+              <p className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+                {message}
+              </p>
+            )}
+
+            <form className="mt-6 space-y-4 text-left" onSubmit={verify}>
+              <Field
+                label="Email address"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <Field
+                label="Verification code"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="000000"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="text-center text-2xl tracking-[0.35em] font-mono"
+                required
+              />
+              <button
+                type="submit"
+                className="cf-btn-primary w-full"
+                disabled={loading || otp.length !== 6}
+              >
+                {loading ? 'Verifying…' : 'Verify Email'}
+              </button>
+            </form>
+
+            <p className="mt-6 text-sm text-muted">Didn&apos;t receive the code?</p>
             <button
+              type="button"
               onClick={resend}
               disabled={resending}
-              className="cf-btn-ghost mt-2"
+              className="cf-btn-ghost mt-2 w-full"
             >
-              {resending ? 'Sending…' : '↻ Resend Email'}
+              {resending ? 'Sending…' : '↻ Resend Code'}
             </button>
           </>
         )}

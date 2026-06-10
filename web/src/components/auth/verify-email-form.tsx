@@ -74,8 +74,7 @@ export function VerifyEmailForm() {
           <>
             <p className="mt-3 text-sm text-muted-foreground">
               Enter the 6-digit code sent to{' '}
-              <span className="font-semibold text-primary">noreply@botandev.com</span> from
-              BotanDev
+              <span className="font-semibold text-primary">{email || 'your email'}</span>
             </p>
 
             {error && (

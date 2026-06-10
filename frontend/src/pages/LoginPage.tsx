@@ -9,6 +9,7 @@ import { GoogleButton } from '../components/GoogleButton';
 import { useAuth } from '../context/AuthContext';
 import { loginSchema, LoginValues } from '../lib/validation';
 import { getApiErrorMessage } from '../lib/api';
+import axios from 'axios';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -33,7 +34,13 @@ export default function LoginPage() {
       toast.success('Welcome back!');
       navigate(user.profileComplete ? from : '/complete-profile', { replace: true });
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Unable to sign in.'));
+      const msg = getApiErrorMessage(err, 'Unable to sign in.');
+      if (axios.isAxiosError(err) && err.response?.data?.error?.code === 'EMAIL_NOT_VERIFIED') {
+        toast.error('Please verify your email first.');
+        navigate(`/verify-email?email=${encodeURIComponent(values.email)}`, { replace: true });
+        return;
+      }
+      toast.error(msg);
     }
   };
 
