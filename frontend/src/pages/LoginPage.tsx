@@ -1,4 +1,4 @@
-/** src/pages/LoginPage.tsx — screen 01 from the design. */
+/** src/pages/LoginPage.tsx — Module 01 Authentication */
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -20,7 +20,7 @@ export default function LoginPage() {
   const from =
     redirect ??
     (location.state as { from?: { pathname: string } })?.from?.pathname ??
-    '/dashboard';
+    '/workspaces';
 
   const {
     register,
@@ -46,8 +46,8 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-bold text-white">Welcome Back 👋</h1>
-      <p className="mt-1 text-sm text-muted">Sign in to your account</p>
+      <h1 className="text-2xl font-bold text-cf-text">Sign In</h1>
+      <p className="mt-1 text-sm text-cf-muted">Enter your credentials to access your account</p>
 
       <form className="mt-7 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
         <Field
@@ -67,7 +67,7 @@ export default function LoginPage() {
         />
 
         <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2 text-slate-300">
+          <label className="flex items-center gap-2 text-cf-muted">
             <input type="checkbox" className="accent-brand" {...register('rememberMe')} />
             Remember me
           </label>
@@ -76,7 +76,7 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <button type="submit" className="cf-btn-primary" disabled={isSubmitting}>
+        <button type="submit" className="cf-btn-primary w-full" disabled={isSubmitting}>
           {isSubmitting ? 'Signing in…' : 'Sign In'}
         </button>
       </form>
@@ -84,7 +84,7 @@ export default function LoginPage() {
       <Divider />
       <GoogleButton />
 
-      <p className="mt-6 text-center text-sm text-muted">
+      <p className="mt-6 text-center text-sm text-cf-muted">
         Don&apos;t have an account?{' '}
         <Link to="/register" className="font-semibold text-brand hover:underline">
           Sign up
@@ -96,10 +96,10 @@ export default function LoginPage() {
 
 function Divider() {
   return (
-    <div className="my-5 flex items-center gap-3 text-xs text-muted">
-      <span className="h-px flex-1 bg-ink-500" />
+    <div className="my-5 flex items-center gap-3 text-xs text-cf-muted">
+      <span className="h-px flex-1 bg-cf-border" />
       or continue with
-      <span className="h-px flex-1 bg-ink-500" />
+      <span className="h-px flex-1 bg-cf-border" />
     </div>
   );
 }

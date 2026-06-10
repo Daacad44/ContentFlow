@@ -1,32 +1,35 @@
 /**
- * src/pages/ConnectedAccountsPage.tsx
- * Manage Facebook, Instagram, LinkedIn, and TikTok account connections.
+ * src/pages/ConnectedAccountsPage.tsx — Module 03 Social Accounts
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AppShell } from '../components/AppShell';
 import { ConnectAccountButton } from '../components/ConnectAccountButton';
-import { SocialAccountCard } from '../components/SocialAccountCard';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getApiErrorMessage } from '../lib/api';
 import { socialApi, ConnectedAccount, SocialPlatform, PLATFORM_META } from '../lib/social';
+import { PageHeader, StatusBadge, ProgressRing } from '../components/ui/ContentFlowUI';
 
-const PLATFORMS: SocialPlatform[] = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'TIKTOK'];
+const PLATFORMS: SocialPlatform[] = ['INSTAGRAM', 'FACEBOOK', 'LINKEDIN'];
 
 export default function ConnectedAccountsPage() {
   const { activeWorkspace, permissions } = useWorkspace();
   const [searchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
 
   const canConnect = permissions.includes('social:connect');
-  const canDisconnect = permissions.includes('social:disconnect');
-  const canSync = permissions.includes('social:sync');
 
-  const isExpired = (status: string) =>
-    status === 'TOKEN_EXPIRED' || status === 'ERROR';
+  const handleConnect = async () => {
+    if (!activeWorkspace) return;
+    try {
+      const { data } = await socialApi.connect(activeWorkspace.id, 'INSTAGRAM', '/accounts');
+      window.location.href = data.data.authUrl;
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to connect account.'));
+    }
+  };
 
   const loadAccounts = useCallback(async () => {
     if (!activeWorkspace) return;
@@ -42,18 +45,8 @@ export default function ConnectedAccountsPage() {
   }, [activeWorkspace]);
 
   useEffect(() => {
-    (async () => {
-      await loadAccounts();
-      if (activeWorkspace && canSync) {
-        try {
-          const { data } = await socialApi.sync(activeWorkspace.id);
-          setAccounts(data.data.accounts);
-        } catch {
-          // Non-blocking — list still shown from initial load
-        }
-      }
-    })();
-  }, [loadAccounts, activeWorkspace, canSync]);
+    void loadAccounts();
+  }, [loadAccounts]);
 
   useEffect(() => {
     if (searchParams.get('connected') === 'true') {
@@ -61,117 +54,106 @@ export default function ConnectedAccountsPage() {
       loadAccounts();
     }
     const error = searchParams.get('error');
-    if (error) {
-      toast.error(decodeURIComponent(error));
-    }
+    if (error) toast.error(decodeURIComponent(error));
   }, [searchParams, loadAccounts]);
 
-  const handleSync = async () => {
-    if (!activeWorkspace) return;
-    setSyncing(true);
-    try {
-      const { data } = await socialApi.sync(activeWorkspace.id);
-      toast.success(`Synced ${data.data.synced} account(s)`);
-      setAccounts(data.data.accounts);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Sync failed.'));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const connectedPlatforms = new Set(accounts.map((a) => a.platform));
+  const healthyCount = accounts.filter((a) => a.status === 'CONNECTED').length;
+  const healthPct = accounts.length > 0 ? Math.round((healthyCount / accounts.length) * 100) : 100;
 
   if (!activeWorkspace) {
     return (
       <AppShell>
-        <p className="text-muted">Select a workspace to manage social accounts.</p>
+        <p className="text-cf-muted">Select a workspace to manage social accounts.</p>
       </AppShell>
     );
   }
 
   return (
     <AppShell>
-      <div className="space-y-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Connected Accounts</h1>
-            <p className="mt-1 text-muted">
-              Connect Facebook, Instagram, LinkedIn, and TikTok to schedule and publish content.
-            </p>
-          </div>
-          {canSync && (
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="rounded-lg border border-ink-500 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-ink-700 disabled:opacity-50"
-            >
-              {syncing ? 'Syncing…' : 'Sync accounts'}
+      <PageHeader
+        title="Connected Accounts"
+        action={
+          canConnect && (
+            <button onClick={() => void handleConnect()} className="cf-btn-primary">
+              + Connect Account
             </button>
-          )}
-        </div>
+          )
+        }
+      />
 
-        {canConnect && (
-          <section>
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
-              Connect a platform
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {PLATFORMS.map((platform) => {
-                const connected = accounts.find((a) => a.platform === platform);
-                const disabled =
-                  connectedPlatforms.has(platform) &&
-                  connected &&
-                  !isExpired(connected.status);
-                return (
-                  <ConnectAccountButton
-                    key={platform}
-                    workspaceId={activeWorkspace.id}
-                    platform={platform}
-                    disabled={disabled}
-                    label={
-                      connected && isExpired(connected.status)
-                        ? `Reconnect ${PLATFORM_META[platform].label}`
-                        : undefined
-                    }
-                  />
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        <section>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
-            Your accounts ({accounts.length})
-          </h2>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           {loading ? (
-            <p className="text-muted">Loading accounts…</p>
+            <p className="text-cf-muted">Loading accounts…</p>
           ) : accounts.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-ink-500 bg-ink-800/20 p-8 text-center">
-              <p className="text-muted">No accounts connected yet.</p>
+            <div className="cf-card border-dashed text-center">
+              <p className="text-cf-muted">No accounts connected yet.</p>
               {canConnect && (
-                <p className="mt-1 text-sm text-muted">
-                  Choose a platform above to get started.
-                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {PLATFORMS.map((platform) => (
+                    <ConnectAccountButton
+                      key={platform}
+                      workspaceId={activeWorkspace.id}
+                      platform={platform}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {accounts.map((account) => (
-                <SocialAccountCard
-                  key={account.id}
-                  workspaceId={activeWorkspace.id}
-                  account={account}
-                  canDisconnect={canDisconnect}
-                  canReconnect={canConnect}
-                  onUpdate={loadAccounts}
-                />
-              ))}
-            </div>
+            accounts.map((account) => (
+              <AccountCard key={account.id} account={account} />
+            ))
           )}
-        </section>
+        </div>
+
+        <div className="cf-card flex flex-col items-center justify-center">
+          <h3 className="mb-4 text-sm font-semibold text-cf-text">Connection Health</h3>
+          <ProgressRing
+            value={healthPct}
+            label={healthPct === 100 ? 'All accounts are healthy' : `${healthyCount} of ${accounts.length} healthy`}
+          />
+        </div>
       </div>
     </AppShell>
+  );
+}
+
+function AccountCard({ account }: { account: ConnectedAccount }) {
+  const meta = PLATFORM_META[account.platform];
+  const handle = account.username ? `@${account.username}` : account.displayName ?? meta.label;
+
+  return (
+    <div className="cf-card flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        {account.avatarUrl ? (
+          <img src={account.avatarUrl} alt="" className="h-12 w-12 rounded-full border border-cf-border object-cover" />
+        ) : (
+          <span
+            className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white"
+            style={{ backgroundColor: meta.color }}
+          >
+            {meta.icon}
+          </span>
+        )}
+        <div>
+          <p className="font-medium text-cf-text">{meta.label}</p>
+          <p className="text-sm text-cf-muted">{handle}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-6 text-right">
+        <div>
+          <p className="text-xs text-cf-muted">Followers</p>
+          <p className="font-semibold text-cf-text">—</p>
+        </div>
+        <div>
+          <p className="text-xs text-cf-muted">Engagement</p>
+          <p className="font-semibold text-cf-text">—</p>
+        </div>
+        <StatusBadge variant={account.status === 'CONNECTED' ? 'connected' : 'pending'}>
+          {account.status === 'CONNECTED' ? 'Connected' : account.status.replace('_', ' ')}
+        </StatusBadge>
+      </div>
+    </div>
   );
 }

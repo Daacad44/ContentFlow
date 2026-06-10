@@ -4,29 +4,43 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ContentFlow brand palette (dark navy + orange accent)
         brand: {
-          DEFAULT: '#ff7a1a',
-          50: '#fff3e9',
-          100: '#ffe0c4',
-          400: '#ff9747',
-          500: '#ff7a1a',
-          600: '#e8650a',
+          DEFAULT: '#B45309',
+          50: '#fffbeb',
+          100: '#fef3c7',
+          400: '#D97706',
+          500: '#B45309',
+          600: '#92400e',
+        },
+        cf: {
+          bg: '#020617',
+          surface: '#111827',
+          text: '#F8FAFC',
+          muted: '#94A3B8',
+          border: '#334155',
+          navy: {
+            900: '#0F172A',
+            800: '#1E293B',
+          },
+          umber: {
+            600: '#B45309',
+            500: '#D97706',
+          },
         },
         ink: {
-          900: '#0b1220',
-          800: '#0f1729',
-          700: '#111a2e',
-          600: '#16203a',
-          500: '#1e2a44',
+          900: '#020617',
+          800: '#0F172A',
+          700: '#111827',
+          600: '#1E293B',
+          500: '#334155',
         },
-        muted: '#8aa0c2',
+        muted: '#94A3B8',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(255,122,26,0.25), 0 8px 30px rgba(255,122,26,0.12)',
+        glow: '0 0 0 1px rgba(180,83,9,0.25), 0 8px 30px rgba(180,83,9,0.12)',
       },
     },
   },

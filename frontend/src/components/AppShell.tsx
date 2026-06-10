@@ -1,6 +1,6 @@
 /**
  * src/components/AppShell.tsx
- * Authenticated app layout with workspace switcher and navigation.
+ * Authenticated app layout with left sidebar navigation per ContentFlow design.
  */
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -9,35 +9,40 @@ import { Logo } from './Logo';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
+import {
+  IconWorkspace,
+  IconAccounts,
+  IconScheduler,
+  IconPublishing,
+  IconAIContent,
+  IconStudio,
+  IconAnalytics,
+  IconNotifications,
+  IconBilling,
+  IconAdmin,
+  IconActivity,
+  IconSettings,
+} from './icons/SidebarIcons';
 
 const NAV = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/posts', label: 'Posts' },
-  { to: '/analytics', label: 'Analytics' },
-  { to: '/ai-content', label: 'AI Content' },
-  { to: '/studio', label: 'Studio' },
-  { to: '/publishing', label: 'Publishing' },
-  { to: '/accounts', label: 'Accounts' },
-  { to: '/notifications', label: 'Notifications' },
-  { to: '/billing', label: 'Billing' },
-  { to: '/activity-logs', label: 'Activity' },
-  { to: '/workspaces', label: 'Workspaces' },
-  { to: '/team', label: 'Team' },
-  { to: '/workspace/settings', label: 'Settings' },
-];
-
-const ADMIN_NAV = [
-  { to: '/admin', label: 'Admin' },
-  { to: '/admin/users', label: 'Users' },
-  { to: '/admin/revenue', label: 'Revenue' },
-  { to: '/admin/monitoring', label: 'Monitoring' },
-  { to: '/admin/reports', label: 'Reports' },
+  { to: '/workspaces', label: 'Workspace', icon: IconWorkspace },
+  { to: '/accounts', label: 'Social Accounts', icon: IconAccounts },
+  { to: '/scheduler', label: 'Scheduler', icon: IconScheduler },
+  { to: '/publishing', label: 'Publishing Engine', icon: IconPublishing },
+  { to: '/ai-content', label: 'AI Content Generator', icon: IconAIContent },
+  { to: '/studio', label: 'AI Creative Studio', icon: IconStudio },
+  { to: '/analytics', label: 'Analytics', icon: IconAnalytics },
+  { to: '/notifications', label: 'Notifications', icon: IconNotifications },
+  { to: '/billing', label: 'Billing', icon: IconBilling },
+  { to: '/admin', label: 'Admin Panel', icon: IconAdmin, adminOnly: true },
+  { to: '/activity-logs', label: 'Activity Logs', icon: IconActivity },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
   const handleLogout = async () => {
     await logout();
@@ -45,71 +50,77 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate('/login', { replace: true });
   };
 
+  const isActive = (to: string) => {
+    if (to === '/workspaces') {
+      return (
+        location.pathname === '/workspaces' ||
+        location.pathname === '/team' ||
+        location.pathname.startsWith('/workspace')
+      );
+    }
+    if (to === '/admin') {
+      return location.pathname.startsWith('/admin');
+    }
+    return location.pathname === to || location.pathname.startsWith(`${to}/`);
+  };
+
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-ink-500/60 bg-ink-900/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-6">
-            <Link to="/dashboard">
-              <Logo />
-            </Link>
-            <nav className="hidden items-center gap-1 md:flex">
-              {NAV.map((item) => {
-                const active =
-                  location.pathname === item.to ||
-                  (item.to !== '/dashboard' && location.pathname.startsWith(item.to));
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                      active
-                        ? 'bg-brand/15 text-brand'
-                        : 'text-muted hover:bg-ink-700 hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <NotificationBell />
-            <WorkspaceSwitcher />
-            <span className="hidden text-sm text-muted lg:inline">{user?.email}</span>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg border border-ink-500 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-ink-700"
-            >
-              Logout
-            </button>
-          </div>
+    <div className="flex min-h-screen bg-cf-bg">
+      <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-cf-border bg-cf-navy-900">
+        <div className="border-b border-cf-border px-5 py-5">
+          <Link to="/workspaces">
+            <Logo size="sm" />
+          </Link>
         </div>
-      </header>
 
-      {user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') && (
-        <div className="border-b border-ink-500/40 bg-ink-900/50">
-          <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-6 py-2">
-            {ADMIN_NAV.map((item) => (
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+          {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+            const active = isActive(item.to);
+            const Icon = item.icon;
+            return (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs font-medium ${
-                  location.pathname.startsWith(item.to)
-                    ? 'bg-amber-500/15 text-amber-400'
-                    : 'text-muted hover:bg-ink-700'
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  active
+                    ? 'bg-brand text-white'
+                    : 'text-cf-muted hover:bg-cf-navy-800 hover:text-cf-text'
                 }`}
               >
-                {item.label}
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="truncate">{item.label}</span>
               </Link>
-            ))}
-          </div>
-        </div>
-      )}
+            );
+          })}
+        </nav>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+        <div className="border-t border-cf-border px-3 py-4">
+          <Link
+            to="/workspace/settings"
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+              location.pathname === '/workspace/settings'
+                ? 'bg-brand text-white'
+                : 'text-cf-muted hover:bg-cf-navy-800 hover:text-cf-text'
+            }`}
+          >
+            <IconSettings className="h-5 w-5 shrink-0" />
+            Settings
+          </Link>
+        </div>
+      </aside>
+
+      <div className="flex min-h-screen flex-1 flex-col pl-60">
+        <header className="sticky top-0 z-20 flex items-center justify-end gap-3 border-b border-cf-border bg-cf-bg/95 px-6 py-3 backdrop-blur">
+          <NotificationBell />
+          <WorkspaceSwitcher />
+          <span className="hidden text-sm text-cf-muted lg:inline">{user?.email}</span>
+          <button onClick={handleLogout} className="cf-btn-outline px-3 py-1.5 text-xs">
+            Logout
+          </button>
+        </header>
+
+        <main className="flex-1 p-6">{children}</main>
+      </div>
     </div>
   );
 }

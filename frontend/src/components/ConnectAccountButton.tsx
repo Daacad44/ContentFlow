@@ -33,7 +33,7 @@ export function ConnectAccountButton({ workspaceId, platform, disabled, label }:
     <button
       onClick={handleConnect}
       disabled={disabled || loading}
-      className="flex items-center gap-3 rounded-xl border border-ink-500 bg-ink-800/60 px-5 py-4 text-left transition hover:border-brand/40 hover:bg-ink-700/60 disabled:opacity-50"
+      className="flex items-center gap-3 rounded-lg border border-cf-border bg-cf-navy-900 px-5 py-4 text-left transition hover:border-brand/40 hover:bg-cf-navy-800 disabled:opacity-50"
     >
       <span
         className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
@@ -42,10 +42,10 @@ export function ConnectAccountButton({ workspaceId, platform, disabled, label }:
         {meta.icon}
       </span>
       <div>
-        <p className="font-medium text-white">
+        <p className="font-medium text-cf-text">
           {loading ? 'Connecting…' : (label ?? `Connect ${meta.label}`)}
         </p>
-        <p className="text-sm text-muted">Authorize via OAuth</p>
+        <p className="text-sm text-cf-muted">Authorize via OAuth</p>
       </div>
     </button>
   );

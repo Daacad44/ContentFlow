@@ -25,6 +25,7 @@ import PostComposerPage from './pages/PostComposerPage';
 import AIContentPage from './pages/AIContentPage';
 import CreativeStudioPage from './pages/CreativeStudioPage';
 import PublishingLogsPage from './pages/PublishingLogsPage';
+import SchedulerPage from './pages/SchedulerPage';
 import SocialSelectPage from './pages/SocialSelectPage';
 import SocialOAuthCallbackPage from './pages/SocialOAuthCallbackPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
@@ -47,7 +48,7 @@ export default function App() {
           <Toaster
             position="top-center"
             toastOptions={{
-              style: { background: '#111a2e', color: '#fff', border: '1px solid #1e2a44' },
+              style: { background: '#111827', color: '#F8FAFC', border: '1px solid #334155' },
             }}
           />
           <Routes>
@@ -105,6 +106,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <ConnectedAccountsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scheduler"
+              element={
+                <ProtectedRoute>
+                  <SchedulerPage />
                 </ProtectedRoute>
               }
             />

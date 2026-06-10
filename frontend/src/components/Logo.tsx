@@ -15,12 +15,12 @@ export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
         />
         <defs>
           <linearGradient id="cfg" x1="0" y1="0" x2="48" y2="48">
-            <stop stopColor="#ff9747" />
-            <stop offset="1" stopColor="#e8650a" />
+            <stop stopColor="#D97706" />
+            <stop offset="1" stopColor="#B45309" />
           </linearGradient>
         </defs>
       </svg>
-      <span className={`font-extrabold tracking-tight text-white ${text}`}>ContentFlow</span>
+      <span className={`font-bold tracking-tight text-cf-text ${text}`}>ContentFlow</span>
     </div>
   );
 }
