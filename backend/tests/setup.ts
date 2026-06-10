@@ -13,4 +13,6 @@ process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'test_refresh
 process.env.DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/contentflow_test?schema=public';
 process.env.CLIENT_URL = 'http://localhost:5173';
-process.env.CORS_ORIGINS = 'http://localhost:5173';
+process.env.CORS_ORIGINS =
+  process.env.CORS_ORIGINS ??
+  'http://localhost:5173,http://localhost:3000,https://content-flow-black.vercel.app';

@@ -16,6 +16,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
 import { ApiError } from '../utils/apiError';
+import { decodeOAuthState, encodeOAuthState, parseRedirectTarget } from '../utils/oauthRedirect';
 import {
   registerSchema,
   loginSchema,
@@ -100,21 +101,27 @@ router.post(
 
 // --- Google OAuth ---------------------------------------------------------
 if (env.googleOAuthEnabled) {
-  router.get(
-    '/google',
-    passport.authenticate('google', { scope: ['profile', 'email'], session: false }),
-  );
+  router.get('/google', authLimiter, (req, res, next) => {
+    const redirectOrigin = parseRedirectTarget(req.query.redirect);
+    const state = encodeOAuthState(redirectOrigin);
+    passport.authenticate('google', {
+      scope: ['profile', 'email'],
+      session: false,
+      state,
+    })(req, res, next);
+  });
 
   router.get(
     '/google/callback',
     (req, res, next) => {
+      const clientUrl = decodeOAuthState(req.query.state);
       passport.authenticate('google', { session: false }, (err, user) => {
         if (err) {
           const code = err instanceof ApiError ? err.code : 'oauth_failed';
-          return res.redirect(`${env.CLIENT_URL}/login?error=${encodeURIComponent(code)}`);
+          return res.redirect(`${clientUrl}/login?error=${encodeURIComponent(code)}`);
         }
         if (!user) {
-          return res.redirect(`${env.CLIENT_URL}/login?error=oauth_failed`);
+          return res.redirect(`${clientUrl}/login?error=oauth_failed`);
         }
         return authController.googleCallback(req, res).catch(next);
       })(req, res, next);

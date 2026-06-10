@@ -8,6 +8,7 @@ import { getClientContext } from '../utils/requestContext';
 import { setRefreshCookie, clearRefreshCookie } from '../utils/cookies';
 import { ok, created } from '../utils/apiResponse';
 import { env } from '../config/env';
+import { decodeOAuthState } from '../utils/oauthRedirect';
 
 export const authController = {
   async register(req: Request, res: Response) {
@@ -107,18 +108,19 @@ export const authController = {
   },
 
   async googleCallback(req: Request, res: Response) {
+    const clientUrl = decodeOAuthState(req.query.state);
     const result = (req as unknown as {
       authResult?: Awaited<ReturnType<typeof authService.loginWithGoogle>>;
     }).authResult;
 
     if (!result?.accessToken || !result.refreshToken) {
-      return res.redirect(`${env.CLIENT_URL}/login?error=oauth_failed`);
+      return res.redirect(`${clientUrl}/login?error=oauth_failed`);
     }
 
     setRefreshCookie(res, result.refreshToken);
     const profileComplete = result.user.profileComplete ? '1' : '0';
     const redirectUrl =
-      `${env.CLIENT_URL}/oauth/callback` +
+      `${clientUrl}/oauth/callback` +
       `#access_token=${encodeURIComponent(result.accessToken)}` +
       `&profile_complete=${profileComplete}`;
     return res.redirect(redirectUrl);

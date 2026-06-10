@@ -5,10 +5,9 @@ import { getApiUrl } from '@/lib/api';
 
 /** "Continue with Google" — full-page redirect to backend OAuth flow. */
 export function GoogleButton({ children = 'Continue with Google' }: { children?: string }) {
-  const href = `${getApiUrl()}/auth/google`;
-
   function startGoogleAuth() {
-    window.location.href = href;
+    const redirect = encodeURIComponent(window.location.origin);
+    window.location.href = `${getApiUrl()}/auth/google?redirect=${redirect}`;
   }
 
   return (

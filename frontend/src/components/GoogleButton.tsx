@@ -2,8 +2,11 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
 
 export function GoogleButton({ label = 'Continue with Google' }: { label?: string }) {
+  const redirect = encodeURIComponent(window.location.origin);
+  const href = `${API_URL}/auth/google?redirect=${redirect}`;
+
   return (
-    <a href={`${API_URL}/auth/google`} className="cf-btn-ghost">
+    <a href={href} className="cf-btn-ghost">
       <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
         <path
           fill="#4285F4"

@@ -56,6 +56,8 @@ const envSchema = z.object({
   OTP_PEPPER: z.string().optional().default(''),
 
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  /** Override refresh cookie SameSite: lax | strict | none (auto-detects cross-origin) */
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).optional(),
   PASSWORD_PEPPER: z.string().optional().default(''),
   MAX_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOCKOUT_MINUTES: z.coerce.number().int().positive().default(15),
@@ -81,6 +83,11 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
   CLOUDINARY_API_KEY: z.string().optional().default(''),
   CLOUDINARY_API_SECRET: z.string().optional().default(''),
+
+  // Stripe (Agent 10)
+  STRIPE_SECRET_KEY: z.string().optional().default(''),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default(''),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -114,6 +121,7 @@ export const env = {
   cloudinaryEnabled: Boolean(
     data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
   ),
+  stripeEnabled: Boolean(data.STRIPE_SECRET_KEY),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
   publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
 };
