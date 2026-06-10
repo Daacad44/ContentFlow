@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthShell } from '@/components/layout/auth-shell';
 import { LoginIllustration } from '@/components/illustrations';
 import { Field } from '@/components/auth/field';
@@ -18,11 +18,23 @@ import { getApiErrorMessage } from '@/lib/api';
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const oauthError = searchParams.get('error');
+    if (oauthError === 'oauth_failed') {
+      setError('Google sign-in failed. Please try again.');
+    } else if (oauthError === 'FORBIDDEN') {
+      setError('This account has been deactivated.');
+    } else if (oauthError) {
+      setError('Sign-in failed. Please try again.');
+    }
+  }, [searchParams]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +42,7 @@ export function LoginForm() {
     setLoading(true);
     try {
       const { user } = await login(email, password, rememberMe);
-      router.push(!user.profileComplete ? '/complete-profile' : '/login');
+      router.push(user.profileComplete ? '/login' : '/complete-profile');
     } catch (err) {
       setError(getApiErrorMessage(err, 'Unable to sign in.'));
     } finally {

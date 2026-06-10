@@ -107,11 +107,20 @@ export const authController = {
   },
 
   async googleCallback(req: Request, res: Response) {
-    const result = (req as unknown as { authResult: Awaited<ReturnType<typeof authService.loginWithGoogle>> }).authResult;
+    const result = (req as unknown as {
+      authResult?: Awaited<ReturnType<typeof authService.loginWithGoogle>>;
+    }).authResult;
+
+    if (!result?.accessToken || !result.refreshToken) {
+      return res.redirect(`${env.CLIENT_URL}/login?error=oauth_failed`);
+    }
+
     setRefreshCookie(res, result.refreshToken);
-    const redirectUrl = `${env.CLIENT_URL}/oauth/callback#access_token=${encodeURIComponent(
-      result.accessToken,
-    )}`;
+    const profileComplete = result.user.profileComplete ? '1' : '0';
+    const redirectUrl =
+      `${env.CLIENT_URL}/oauth/callback` +
+      `#access_token=${encodeURIComponent(result.accessToken)}` +
+      `&profile_complete=${profileComplete}`;
     return res.redirect(redirectUrl);
   },
 };

@@ -3,13 +3,23 @@
  * Sends credentials so the httpOnly refresh cookie (on :4000) is included.
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+const TOKEN_KEY = 'cf_access_token';
 
-let accessToken: string | null = null;
+function readStoredToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+let accessToken: string | null = readStoredToken();
 
 export const tokenStore = {
   get: () => accessToken,
   set: (t: string | null) => {
     accessToken = t;
+    if (typeof window !== 'undefined') {
+      if (t) sessionStorage.setItem(TOKEN_KEY, t);
+      else sessionStorage.removeItem(TOKEN_KEY);
+    }
   },
 };
 

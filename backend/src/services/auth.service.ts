@@ -195,6 +195,14 @@ export const authService = {
       );
     }
 
+    if (!user.emailVerified) {
+      throw new ApiError(
+        403,
+        'Please verify your email address before logging in.',
+        'EMAIL_NOT_VERIFIED',
+      );
+    }
+
     if (!user.isActive) {
       throw ApiError.forbidden('This account has been deactivated.');
     }
@@ -214,14 +222,6 @@ export const authService = {
       });
       await auditService.record({ action: AUDIT.LOGIN_FAILED, userId: user.id, ...ctx });
       throw invalid();
-    }
-
-    if (!user.emailVerified) {
-      throw new ApiError(
-        403,
-        'Please verify your email address before logging in.',
-        'EMAIL_NOT_VERIFIED',
-      );
     }
 
     // Transparent hash upgrade if parameters changed.
@@ -418,6 +418,11 @@ export const authService = {
       where: { OR: [{ googleId: profile.googleId }, { email }] },
     });
 
+    // Admin-deactivated accounts stay blocked; unverified local accounts are activated below.
+    if (user && !user.isActive && user.emailVerified) {
+      throw ApiError.forbidden('This account has been deactivated.');
+    }
+
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -426,23 +431,24 @@ export const authService = {
           avatarUrl: profile.avatarUrl,
           googleId: profile.googleId,
           provider: AuthProvider.GOOGLE,
-          emailVerified: true, // Google has already verified the email.
+          emailVerified: true,
+          isActive: true,
         },
       });
       await workspaceService.createDefaultForUser(user.id, user.fullName);
-    } else if (!user.googleId) {
-      // Link Google to the existing account.
+    } else {
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
-          googleId: profile.googleId,
+          googleId: user.googleId ?? profile.googleId,
           emailVerified: true,
+          isActive: true,
           avatarUrl: user.avatarUrl ?? profile.avatarUrl,
+          fullName: user.fullName || profile.fullName,
         },
       });
+      await otpService.invalidateAll(user.id, OtpPurpose.EMAIL_VERIFICATION);
     }
-
-    if (!user.isActive) throw ApiError.forbidden('This account has been deactivated.');
 
     user = await prisma.user.update({
       where: { id: user.id },

@@ -3,16 +3,18 @@
 import { Button } from '@/components/ui/button';
 import { getApiUrl } from '@/lib/api';
 
-/** "Continue with Google" — redirects to backend OAuth flow. */
+/** "Continue with Google" — full-page redirect to backend OAuth flow. */
 export function GoogleButton({ children = 'Continue with Google' }: { children?: string }) {
   const href = `${getApiUrl()}/auth/google`;
 
+  function startGoogleAuth() {
+    window.location.href = href;
+  }
+
   return (
-    <Button type="button" variant="google" className="w-full" asChild>
-      <a href={href}>
-        <GoogleIcon />
-        {children}
-      </a>
+    <Button type="button" variant="google" className="w-full" onClick={startGoogleAuth}>
+      <GoogleIcon />
+      {children}
     </Button>
   );
 }

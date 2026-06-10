@@ -13,7 +13,7 @@ function baseCookieOptions(): CookieOptions {
     httpOnly: true,
     secure: env.isProd, // requires HTTPS in production
     sameSite: env.isProd ? 'strict' : 'lax',
-    path: '/api/v1/auth',
+    path: '/api',
   };
 }
 

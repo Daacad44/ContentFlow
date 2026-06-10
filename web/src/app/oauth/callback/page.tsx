@@ -4,19 +4,23 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokenStore } from '@/lib/api';
 
-/** Handles Google OAuth redirect: /oauth/callback#access_token=... */
+/** Handles Google OAuth redirect: /oauth/callback#access_token=...&profile_complete=0|1 */
 export default function OAuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const token = hash.get('access_token');
-    if (token) {
-      tokenStore.set(token);
-      router.replace('/complete-profile');
-    } else {
+    const profileComplete = hash.get('profile_complete') === '1';
+
+    if (!token) {
       router.replace('/login?error=oauth_failed');
+      return;
     }
+
+    tokenStore.set(token);
+    window.history.replaceState(null, '', window.location.pathname);
+    router.replace(profileComplete ? '/login' : '/complete-profile');
   }, [router]);
 
   return (

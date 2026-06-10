@@ -75,3 +75,7 @@ export async function updateProfile(input: {
     body: JSON.stringify(input),
   });
 }
+
+export async function getMe() {
+  return apiFetch<{ user: PublicUser }>('/auth/me');
+}

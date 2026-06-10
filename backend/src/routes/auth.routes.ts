@@ -15,6 +15,7 @@ import {
 } from '../middleware/rateLimit.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
+import { ApiError } from '../utils/apiError';
 import {
   registerSchema,
   loginSchema,
@@ -106,11 +107,18 @@ if (env.googleOAuthEnabled) {
 
   router.get(
     '/google/callback',
-    passport.authenticate('google', {
-      session: false,
-      failureRedirect: `${env.CLIENT_URL}/login?error=oauth_failed`,
-    }),
-    asyncHandler(authController.googleCallback),
+    (req, res, next) => {
+      passport.authenticate('google', { session: false }, (err, user) => {
+        if (err) {
+          const code = err instanceof ApiError ? err.code : 'oauth_failed';
+          return res.redirect(`${env.CLIENT_URL}/login?error=${encodeURIComponent(code)}`);
+        }
+        if (!user) {
+          return res.redirect(`${env.CLIENT_URL}/login?error=oauth_failed`);
+        }
+        return authController.googleCallback(req, res).catch(next);
+      })(req, res, next);
+    },
   );
 }
 
