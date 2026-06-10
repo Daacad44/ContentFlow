@@ -16,7 +16,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
 import { ApiError } from '../utils/apiError';
-import { decodeOAuthState, encodeOAuthState, parseRedirectTarget } from '../utils/oauthRedirect';
+import { decodeOAuthState, encodeOAuthState, parseRedirectTarget, decodeOAuthCallbackFromState, resolveGoogleCallbackUrl } from '../utils/oauthRedirect';
 import {
   registerSchema,
   loginSchema,
@@ -103,11 +103,13 @@ router.post(
 if (env.googleOAuthEnabled) {
   router.get('/google', authLimiter, (req, res, next) => {
     const redirectOrigin = parseRedirectTarget(req.query.redirect);
-    const state = encodeOAuthState(redirectOrigin);
+    const callbackUrl = resolveGoogleCallbackUrl(req);
+    const state = encodeOAuthState(redirectOrigin, callbackUrl);
     passport.authenticate('google', {
       scope: ['profile', 'email'],
       session: false,
       state,
+      callbackURL: callbackUrl,
     })(req, res, next);
   });
 
@@ -115,16 +117,21 @@ if (env.googleOAuthEnabled) {
     '/google/callback',
     (req, res, next) => {
       const clientUrl = decodeOAuthState(req.query.state);
-      passport.authenticate('google', { session: false }, (err, user) => {
-        if (err) {
-          const code = err instanceof ApiError ? err.code : 'oauth_failed';
-          return res.redirect(`${clientUrl}/login?error=${encodeURIComponent(code)}`);
-        }
-        if (!user) {
-          return res.redirect(`${clientUrl}/login?error=oauth_failed`);
-        }
-        return authController.googleCallback(req, res).catch(next);
-      })(req, res, next);
+      const callbackUrl = decodeOAuthCallbackFromState(req.query.state, req);
+      passport.authenticate(
+        'google',
+        { session: false, callbackURL: callbackUrl },
+        (err, user) => {
+          if (err) {
+            const code = err instanceof ApiError ? err.code : 'oauth_failed';
+            return res.redirect(`${clientUrl}/login?error=${encodeURIComponent(code)}`);
+          }
+          if (!user) {
+            return res.redirect(`${clientUrl}/login?error=oauth_failed`);
+          }
+          return authController.googleCallback(req, res).catch(next);
+        },
+      )(req, res, next);
     },
   );
 }

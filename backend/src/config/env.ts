@@ -112,6 +112,9 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
   googleOAuthEnabled: Boolean(data.GOOGLE_CLIENT_ID && data.GOOGLE_CLIENT_SECRET),
+  googleCallbackUrl:
+    data.GOOGLE_CALLBACK_URL.trim() ||
+    `${data.API_URL.replace(/\/$/, '')}/api/v1/auth/google/callback`,
   resendEnabled: Boolean(data.RESEND_API_KEY),
   smtpEnabled: Boolean(data.SMTP_HOST && data.SMTP_USER),
   emailEnabled: Boolean(data.RESEND_API_KEY || (data.SMTP_HOST && data.SMTP_USER)),

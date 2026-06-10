@@ -10,6 +10,7 @@ import { Request } from 'express';
 import { env } from './env';
 import { authService } from '../services/auth.service';
 import { logger } from '../utils/logger';
+import { getGoogleOAuthRedirectUris } from '../utils/oauthRedirect';
 
 export function configurePassport(): void {
   if (!env.googleOAuthEnabled) {
@@ -17,12 +18,17 @@ export function configurePassport(): void {
     return;
   }
 
+  logger.info(
+    { redirectUris: getGoogleOAuthRedirectUris() },
+    'Google OAuth enabled — register ALL redirect URIs in Google Cloud Console',
+  );
+
   passport.use(
     new GoogleStrategy(
       {
         clientID: env.GOOGLE_CLIENT_ID,
         clientSecret: env.GOOGLE_CLIENT_SECRET,
-        callbackURL: env.GOOGLE_CALLBACK_URL,
+        callbackURL: env.googleCallbackUrl,
         passReqToCallback: true,
       },
       async (
