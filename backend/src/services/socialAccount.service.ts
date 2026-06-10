@@ -214,7 +214,7 @@ export const socialAccountService = {
     const connected = query.connected;
 
     if (accountId) {
-      const zernioAccount = await zernioClient.getAccount(accountId);
+      const zernioAccount = await zernioClient.getAccount(accountId, profile.zernioProfileId);
       const account = await upsertFromZernio(
         workspaceId,
         profile.id,
@@ -242,7 +242,42 @@ export const socialAccountService = {
       };
     }
 
-    // Fallback — sync all accounts for the profile
+    // Fallback — sync accounts for the profile (e.g. TikTok omits accountId in redirect)
+    if (connected) {
+      const platform = fromZernioPlatform(connected);
+      if (platform) {
+        const zernioAccounts = await zernioClient.listAccounts(
+          profile.zernioProfileId,
+          connected,
+        );
+        const latest = zernioAccounts
+          .filter((a) => fromZernioPlatform(a.platform) === platform)
+          .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
+
+        if (latest) {
+          const account = await upsertFromZernio(
+            workspaceId,
+            profile.id,
+            latest,
+            oauthState.userId,
+          );
+          await auditService.record({
+            action: AUDIT.SOCIAL_ACCOUNT_CONNECTED,
+            userId: oauthState.userId,
+            ipAddress: ctx?.ipAddress,
+            userAgent: ctx?.userAgent,
+            metadata: { workspaceId, platform: connected, accountId: latest._id },
+          });
+          return {
+            type: 'success' as const,
+            workspaceId,
+            account: account ? toConnectedAccountDto(account) : null,
+            redirectPath,
+          };
+        }
+      }
+    }
+
     await this.syncAccounts(workspaceId, oauthState.userId, ctx);
     return { type: 'success' as const, workspaceId, account: null, redirectPath };
   },
@@ -319,7 +354,10 @@ export const socialAccountService = {
       throw ApiError.badRequest('Selection not supported for this platform.');
     }
 
-    const zernioAccount = await zernioClient.getAccount(result.account.accountId);
+    const zernioAccount = await zernioClient.getAccount(
+      result.account.accountId,
+      profile.zernioProfileId,
+    );
     const account = await upsertFromZernio(
       params.workspaceId,
       profile.id,

@@ -12,6 +12,9 @@ import { useAuth } from '../context/AuthContext';
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/posts', label: 'Posts' },
+  { to: '/ai-content', label: 'AI Content' },
+  { to: '/studio', label: 'Studio' },
+  { to: '/publishing', label: 'Publishing' },
   { to: '/accounts', label: 'Accounts' },
   { to: '/workspaces', label: 'Workspaces' },
   { to: '/team', label: 'Team' },

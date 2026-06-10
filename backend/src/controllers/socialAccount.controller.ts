@@ -82,22 +82,29 @@ export const socialAccountController = {
   /** Public OAuth callback — Zernio redirects here after platform authorization. */
   async oauthCallback(req: Request, res: Response) {
     const query = req.query as Record<string, string | undefined>;
-    const result = await socialAccountService.handleOAuthCallback(query, getClientContext(req));
+    try {
+      const result = await socialAccountService.handleOAuthCallback(query, getClientContext(req));
 
-    if (result.type === 'selection') {
-      const params = new URLSearchParams({
-        workspaceId: result.workspaceId,
-        platform: result.platform,
-        profileId: result.profileId,
-        tempToken: result.tempToken,
-        step: result.step,
-        userProfile: result.userProfile,
-      });
-      if (result.connectToken) params.set('connectToken', result.connectToken);
-      return res.redirect(`${env.CLIENT_URL}/social/select?${params.toString()}`);
+      if (result.type === 'selection') {
+        const params = new URLSearchParams({
+          workspaceId: result.workspaceId,
+          platform: result.platform,
+          profileId: result.profileId,
+          tempToken: result.tempToken,
+          step: result.step,
+          userProfile: result.userProfile,
+        });
+        if (result.connectToken) params.set('connectToken', result.connectToken);
+        return res.redirect(`${env.CLIENT_URL}/social/select?${params.toString()}`);
+      }
+
+      const redirect = `${env.CLIENT_URL}${result.redirectPath}?connected=true&workspaceId=${result.workspaceId}`;
+      return res.redirect(redirect);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to complete account connection.';
+      const params = new URLSearchParams({ error: message });
+      return res.redirect(`${env.CLIENT_URL}/accounts?${params.toString()}`);
     }
-
-    const redirect = `${env.CLIENT_URL}${result.redirectPath}?connected=true&workspaceId=${result.workspaceId}`;
-    return res.redirect(redirect);
   },
 };

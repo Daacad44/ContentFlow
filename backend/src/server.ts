@@ -7,6 +7,8 @@ import { env } from './config/env';
 import { logger } from './utils/logger';
 import { prisma } from './config/prisma';
 import { postSchedulerService } from './services/postScheduler.service';
+import { publishQueueService } from './services/publishQueue.service';
+import { startPublishWorker } from './workers/publish.worker';
 
 async function bootstrap() {
   // Verify DB connectivity before accepting traffic.
@@ -19,7 +21,15 @@ async function bootstrap() {
   }
 
   const app = createApp();
-  postSchedulerService.start();
+
+  if (publishQueueService.isQueueEnabled()) {
+    startPublishWorker();
+    await publishQueueService.syncScheduledPosts();
+    logger.info('BullMQ publish worker started in-process');
+  } else if (env.ENABLE_IN_PROCESS_SCHEDULER) {
+    postSchedulerService.start();
+    logger.info('In-process post scheduler active (set REDIS_URL for BullMQ)');
+  }
 
   const server = app.listen(env.PORT, () => {
     logger.info(`🚀 ${env.APP_NAME} API listening on ${env.API_URL} (${env.NODE_ENV})`);
@@ -33,7 +43,6 @@ async function bootstrap() {
       logger.info('Cleanup complete. Bye 👋');
       process.exit(0);
     });
-    // Force-exit if cleanup hangs.
     setTimeout(() => process.exit(1), 10_000).unref();
   };
 

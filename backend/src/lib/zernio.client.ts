@@ -27,6 +27,7 @@ export interface ZernioAccount {
   isActive?: boolean;
   enabled?: boolean;
   profileId?: string;
+  createdAt?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -129,15 +130,23 @@ class ZernioClient {
     return data;
   }
 
-  async listAccounts(profileId?: string): Promise<ZernioAccount[]> {
-    const query = profileId ? `?profileId=${profileId}` : '';
+  async listAccounts(profileId?: string, platform?: string): Promise<ZernioAccount[]> {
+    const params = new URLSearchParams();
+    if (profileId) params.set('profileId', profileId);
+    if (platform) params.set('platform', platform);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const data = await this.request<{ accounts: ZernioAccount[] }>(`/accounts${query}`);
     return data.accounts ?? [];
   }
 
-  async getAccount(accountId: string): Promise<ZernioAccount> {
-    const data = await this.request<{ account: ZernioAccount }>(`/accounts/${accountId}`);
-    return data.account;
+  /** Zernio has no GET /accounts/{id} — resolve via listAccounts. */
+  async getAccount(accountId: string, profileId?: string): Promise<ZernioAccount> {
+    const accounts = await this.listAccounts(profileId);
+    const account = accounts.find((a) => a._id === accountId);
+    if (!account) {
+      throw ApiError.notFound(`Zernio account ${accountId} not found.`);
+    }
+    return account;
   }
 
   async disconnectAccount(accountId: string): Promise<void> {
@@ -249,29 +258,76 @@ class ZernioClient {
   }
 
   async createPost(params: {
+    platform: string;
     accountId: string;
     content: string;
-    mediaUrls?: string[];
+    mediaItems?: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
     scheduledAt?: string;
-  }): Promise<{ postId?: string; id?: string; status?: string }> {
-    const data = await this.request<{ post: { _id?: string; id?: string; status?: string } }>(
-      '/posts',
-      {
-        method: 'POST',
-        body: {
-          accountId: params.accountId,
-          content: params.content,
-          mediaUrls: params.mediaUrls,
-          scheduledAt: params.scheduledAt,
-        },
-      },
-    );
-    const post = data.post ?? (data as unknown as { _id?: string; id?: string });
-    return {
-      postId: post._id ?? post.id,
-      id: post._id ?? post.id,
-      status: (post as { status?: string }).status,
+    publishNow?: boolean;
+  }): Promise<{
+    postId: string;
+    status: string;
+    platformStatus: string;
+    platformPostId?: string;
+    platformPostUrl?: string;
+    errorMessage?: string;
+  }> {
+    const body: Record<string, unknown> = {
+      content: params.content,
+      platforms: [{ platform: params.platform, accountId: params.accountId }],
+      publishNow: params.publishNow ?? !params.scheduledAt,
     };
+
+    if (params.scheduledAt) {
+      body.scheduledFor = params.scheduledAt;
+      body.publishNow = false;
+    }
+
+    if (params.mediaItems?.length) {
+      body.mediaItems = params.mediaItems;
+    }
+
+    const data = await this.request<{
+      post: {
+        _id: string;
+        status: string;
+        platforms?: Array<{
+          status: string;
+          platformPostId?: string;
+          platformPostUrl?: string;
+          error?: string;
+          errorMessage?: string;
+        }>;
+      };
+      message?: string;
+    }>('/posts', { method: 'POST', body });
+
+    const post = data.post;
+    const platformResult = post.platforms?.[0];
+
+    return {
+      postId: post._id,
+      status: post.status,
+      platformStatus: platformResult?.status ?? post.status,
+      platformPostId: platformResult?.platformPostId,
+      platformPostUrl: platformResult?.platformPostUrl,
+      errorMessage: platformResult?.error ?? platformResult?.errorMessage,
+    };
+  }
+
+  async getPost(postId: string) {
+    const data = await this.request<{
+      post: {
+        _id: string;
+        status: string;
+        platforms?: Array<{
+          status: string;
+          platformPostId?: string;
+          platformPostUrl?: string;
+        }>;
+      };
+    }>(`/posts/${postId}`);
+    return data.post;
   }
 }
 

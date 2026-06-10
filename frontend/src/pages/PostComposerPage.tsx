@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { AppShell } from '../components/AppShell';
 import { MediaUpload } from '../components/MediaUpload';
 import { PlatformSelector } from '../components/PlatformSelector';
+import { AIPanel } from '../components/AIPanel';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getApiErrorMessage } from '../lib/api';
 import { postsApi, PostMediaInput } from '../lib/posts';
@@ -128,6 +129,37 @@ export default function PostComposerPage() {
     }
   };
 
+  const handleCreateAndPublish = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!activeWorkspace || isEdit) return;
+
+    if (!content.trim()) {
+      toast.error('Content is required.');
+      return;
+    }
+    if (selectedAccountIds.length === 0) {
+      toast.error('Select at least one platform.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data } = await postsApi.create(activeWorkspace.id, {
+        content: content.trim(),
+        connectedAccountIds: selectedAccountIds,
+        media,
+        saveAsDraft: true,
+      });
+      await postsApi.publishNow(activeWorkspace.id, data.data.post.id);
+      toast.success('Post published to your platforms');
+      navigate('/posts');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to publish post.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handlePublishNow = async () => {
     if (!activeWorkspace || !postId) return;
     setSubmitting(true);
@@ -179,6 +211,18 @@ export default function PostComposerPage() {
         </div>
 
         <form className="space-y-6" onSubmit={(e) => void handleSubmit(e, false)}>
+          {permissions.includes('ai:generate') && (
+            <AIPanel
+              workspaceId={activeWorkspace.id}
+              topic={content}
+              disabled={submitting}
+              onApplyContent={(text) => setContent(text)}
+              onApplyHashtags={(tags) =>
+                setContent((prev) => `${prev.trim()}\n\n${tags}`.trim())
+              }
+            />
+          )}
+
           <div>
             <label className="cf-label" htmlFor="content">
               Content
@@ -263,27 +307,37 @@ export default function PostComposerPage() {
                 >
                   Save as draft
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-                >
-                  {submitting ? 'Saving…' : isEdit ? 'Update post' : 'Save post'}
-                </button>
+                {isEdit ? (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-xl border border-ink-500 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:bg-ink-700 disabled:opacity-50"
+                  >
+                    {submitting ? 'Saving…' : 'Update post'}
+                  </button>
+                ) : null}
               </>
             )}
 
-            {isEdit && canPublish && (
+            {canPublish && !scheduleEnabled && (
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => void handlePublishNow()}
+                onClick={(e) =>
+                  isEdit ? void handlePublishNow() : void handleCreateAndPublish(e)
+                }
                 className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                Publish now
+                {submitting ? 'Publishing…' : 'Publish now'}
               </button>
             )}
           </div>
+          {!scheduleEnabled && (
+            <p className="text-xs text-muted">
+              Save as draft keeps the post in ContentFlow only. Use Publish now to post to your
+              connected social accounts.
+            </p>
+          )}
         </form>
       </div>
     </AppShell>

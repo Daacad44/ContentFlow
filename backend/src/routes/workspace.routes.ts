@@ -18,6 +18,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { WORKSPACE_PERMISSIONS } from '../config/workspacePermissions';
 import { socialWorkspaceRoutes } from './social.routes';
 import { postWorkspaceRoutes } from './post.routes';
+import { publishWorkspaceRoutes } from './publish.routes';
+import { aiWorkspaceRoutes } from './ai.routes';
+import { creativeWorkspaceRoutes } from './creative.routes';
 import {
   workspaceIdParamSchema,
   memberIdParamSchema,
@@ -150,5 +153,14 @@ router.use('/:workspaceId/social', socialWorkspaceRoutes);
 
 // --- Posts (scheduler) ------------------------------------------------------
 router.use('/:workspaceId/posts', postWorkspaceRoutes);
+
+// --- Publishing engine (BullMQ) ---------------------------------------------
+router.use('/:workspaceId/publish', publishWorkspaceRoutes);
+
+// --- AI content (Gemini) ----------------------------------------------------
+router.use('/:workspaceId/ai', aiWorkspaceRoutes);
+
+// --- Creative studio (Cloudinary) -------------------------------------------
+router.use('/:workspaceId/creative', creativeWorkspaceRoutes);
 
 export default router;

@@ -60,6 +60,10 @@ export default function ConnectedAccountsPage() {
       toast.success('Social account connected!');
       loadAccounts();
     }
+    const error = searchParams.get('error');
+    if (error) {
+      toast.error(decodeURIComponent(error));
+    }
   }, [searchParams, loadAccounts]);
 
   const handleSync = async () => {

@@ -56,11 +56,13 @@ export default function DashboardPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <QuickLink to="/posts" title="Posts" desc="Create, schedule & publish" />
+        <QuickLink to="/ai-content" title="AI Content" desc="Captions, hashtags & calendars" />
+        <QuickLink to="/studio" title="Creative Studio" desc="AI images, posters & brand kit" />
+        <QuickLink to="/publishing" title="Publishing" desc="Job logs & retry failed posts" />
         <QuickLink to="/accounts" title="Accounts" desc="Connect social platforms" />
         <QuickLink to="/workspaces" title="Workspaces" desc="Create and switch workspaces" />
         <QuickLink to="/team" title="Team" desc="Members & invitations" />
         <QuickLink to="/workspace/settings" title="Settings" desc="Workspace configuration" />
-        <QuickLink to="/complete-profile" title="Profile" desc="Update your account" />
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">

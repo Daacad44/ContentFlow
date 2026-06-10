@@ -22,6 +22,9 @@ import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage';
 import ConnectedAccountsPage from './pages/ConnectedAccountsPage';
 import PostsPage from './pages/PostsPage';
 import PostComposerPage from './pages/PostComposerPage';
+import AIContentPage from './pages/AIContentPage';
+import CreativeStudioPage from './pages/CreativeStudioPage';
+import PublishingLogsPage from './pages/PublishingLogsPage';
 import SocialSelectPage from './pages/SocialSelectPage';
 import SocialOAuthCallbackPage from './pages/SocialOAuthCallbackPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
@@ -116,6 +119,30 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <PostComposerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ai-content"
+              element={
+                <ProtectedRoute>
+                  <AIContentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio"
+              element={
+                <ProtectedRoute>
+                  <CreativeStudioPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/publishing"
+              element={
+                <ProtectedRoute>
+                  <PublishingLogsPage />
                 </ProtectedRoute>
               }
             />

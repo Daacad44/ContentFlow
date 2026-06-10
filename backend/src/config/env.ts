@@ -19,6 +19,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_NAME: z.string().default('ContentFlow'),
   API_URL: z.string().url().default('http://localhost:4000'),
+  /** Publicly reachable API URL for media (Zernio must fetch images). Falls back to API_URL. */
+  PUBLIC_API_URL: z.string().url().optional(),
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -54,6 +56,22 @@ const envSchema = z.object({
   TOKEN_ENCRYPTION_KEY: z.string().optional().default(''),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(25),
+
+  // Redis / BullMQ (Agent 05)
+  REDIS_URL: z.string().optional().default(''),
+  BULLMQ_PREFIX: z.string().default('contentflow'),
+  PUBLISH_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  PUBLISH_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  ENABLE_IN_PROCESS_SCHEDULER: booleanString.default('true'),
+
+  // Gemini AI (Agent 06)
+  GEMINI_API_KEY: z.string().optional().default(''),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash-preview-05-20'),
+
+  // Cloudinary (Agent 07)
+  CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
+  CLOUDINARY_API_KEY: z.string().optional().default(''),
+  CLOUDINARY_API_SECRET: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -80,7 +98,13 @@ export const env = {
   googleOAuthEnabled: Boolean(data.GOOGLE_CLIENT_ID && data.GOOGLE_CLIENT_SECRET),
   smtpEnabled: Boolean(data.SMTP_HOST && data.SMTP_USER),
   zernioEnabled: Boolean(data.ZERNIO_API_KEY),
+  redisEnabled: Boolean(data.REDIS_URL),
+  geminiEnabled: Boolean(data.GEMINI_API_KEY),
+  cloudinaryEnabled: Boolean(
+    data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
+  ),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+  publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
 };
 
 export type Env = typeof env;

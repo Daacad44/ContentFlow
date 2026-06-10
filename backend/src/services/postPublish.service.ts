@@ -6,6 +6,11 @@ import { PostStatus, PostTargetStatus, SocialAccountStatus } from '@prisma/clien
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
 import { zernioClient } from '../lib/zernio.client';
+import { toZernioPlatform } from '../config/socialPlatforms';
+import {
+  isConfirmedPlatformPublish,
+  validatePlatformPublishRequirements,
+} from '../config/postPublishRules';
 import { ApiError } from '../utils/apiError';
 import { logger } from '../utils/logger';
 
@@ -26,6 +31,31 @@ const postInclude = {
   },
   author: { select: { id: true, fullName: true, email: true } },
 };
+
+function toMediaType(mimeType: string): 'image' | 'video' {
+  return mimeType.startsWith('video/') ? 'video' : 'image';
+}
+
+function resolvePublicMediaUrl(url: string): string {
+  if (url.includes('localhost') || url.includes('127.0.0.1')) {
+    return url.replace(env.API_URL, env.publicApiUrl);
+  }
+  return url;
+}
+
+function assertMediaReachable(mediaUrls: string[]) {
+  const hasLocalOnly = mediaUrls.some(
+    (url) =>
+      (url.includes('localhost') || url.includes('127.0.0.1')) &&
+      env.publicApiUrl.includes('localhost'),
+  );
+  if (hasLocalOnly) {
+    throw ApiError.badRequest(
+      'Attached media must be publicly accessible for social platforms to fetch. ' +
+        'Set PUBLIC_API_URL in .env to your tunnel or production API URL (e.g. ngrok).',
+    );
+  }
+}
 
 export const postPublishService = {
   async publishPost(postId: string, workspaceId: string) {
@@ -54,12 +84,26 @@ export const postPublishService = {
       );
     }
 
+    const mediaUrls = post.media.map((m) => resolvePublicMediaUrl(m.url));
+    if (mediaUrls.length > 0) {
+      assertMediaReachable(mediaUrls);
+    }
+
+    for (const target of post.targets) {
+      const requirementError = validatePlatformPublishRequirements(
+        target.connectedAccount.platform,
+        post.media.length,
+      );
+      if (requirementError) {
+        throw ApiError.badRequest(requirementError);
+      }
+    }
+
     await prisma.post.update({
       where: { id: postId },
       data: { status: PostStatus.PUBLISHING },
     });
 
-    const mediaUrls = post.media.map((m) => m.url);
     let allSucceeded = true;
 
     for (const target of post.targets) {
@@ -70,9 +114,14 @@ export const postPublishService = {
 
       try {
         const result = await publishToAccount({
+          platform: toZernioPlatform(target.connectedAccount.platform),
           zernioAccountId: target.connectedAccount.zernioAccountId,
           content: post.content,
-          mediaUrls,
+          media: post.media.map((m) => ({
+            type: toMediaType(m.mimeType),
+            url: resolvePublicMediaUrl(m.url),
+            title: m.filename,
+          })),
         });
 
         await prisma.postTarget.update({
@@ -80,6 +129,7 @@ export const postPublishService = {
           data: {
             status: PostTargetStatus.PUBLISHED,
             externalPostId: result.externalPostId,
+            platformPostUrl: result.platformPostUrl ?? null,
             publishedAt: new Date(),
             errorMessage: null,
           },
@@ -109,25 +159,49 @@ export const postPublishService = {
       include: postInclude,
     });
 
+    if (!allSucceeded) {
+      throw ApiError.badRequest(
+        'Post failed to publish to one or more platforms. Check target errors for details.',
+      );
+    }
+
     return updated;
   },
 };
 
 async function publishToAccount(params: {
+  platform: string;
   zernioAccountId: string;
   content: string;
-  mediaUrls: string[];
-}): Promise<{ externalPostId: string | null }> {
+  media: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
+}): Promise<{ externalPostId: string | null; platformPostUrl?: string }> {
   if (env.zernioEnabled) {
     const result = await zernioClient.createPost({
+      platform: params.platform,
       accountId: params.zernioAccountId,
       content: params.content,
-      mediaUrls: params.mediaUrls.length > 0 ? params.mediaUrls : undefined,
+      mediaItems: params.media.length > 0 ? params.media : undefined,
+      publishNow: true,
     });
-    return { externalPostId: result.postId ?? result.id ?? null };
+
+    if (result.errorMessage) {
+      throw new Error(result.errorMessage);
+    }
+
+    if (!isConfirmedPlatformPublish(result)) {
+      throw new Error(
+        result.errorMessage ??
+          `Publish was not confirmed by the platform (status: ${result.platformStatus || result.status}). ` +
+            'The post may have been saved as a draft in Zernio only.',
+      );
+    }
+
+    return {
+      externalPostId: result.platformPostId ?? result.postId,
+      platformPostUrl: result.platformPostUrl,
+    };
   }
 
-  // Dev fallback when Zernio is not configured.
   logger.info(
     { accountId: params.zernioAccountId },
     'Zernio disabled — simulating publish',

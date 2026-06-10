@@ -52,7 +52,7 @@ export const mediaUploadService = {
 
     fs.writeFileSync(destPath, file.buffer);
 
-    const url = `${env.API_URL}/api/v1/media/${workspaceId}/${storedName}`;
+    const url = `${env.publicApiUrl}/api/v1/media/${workspaceId}/${storedName}`;
 
     return {
       url,

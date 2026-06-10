@@ -5,7 +5,7 @@
 import { PostStatus, Prisma, SocialAccountStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { auditService, AUDIT } from './audit.service';
-import { postPublishService } from './postPublish.service';
+import { publishQueueService } from './publishQueue.service';
 import { ApiError } from '../utils/apiError';
 import type { CreatePostInput, UpdatePostInput } from '../validators/post.validator';
 
@@ -56,6 +56,7 @@ function toPostDto(post: Prisma.PostGetPayload<{ include: typeof postInclude }>)
       id: t.id,
       status: t.status,
       externalPostId: t.externalPostId,
+      platformPostUrl: t.platformPostUrl,
       errorMessage: t.errorMessage,
       publishedAt: t.publishedAt,
       connectedAccount: t.connectedAccount,
@@ -177,6 +178,12 @@ export const postService = {
       metadata: { workspaceId, postId: post.id, status: post.status },
     });
 
+    if (post.status === PostStatus.SCHEDULED && post.scheduledAt) {
+      await publishQueueService.enqueuePublish(post.id, workspaceId, {
+        scheduledAt: post.scheduledAt,
+      }, { userId, ...ctx });
+    }
+
     return toPostDto(post);
   },
 
@@ -274,6 +281,12 @@ export const postService = {
       metadata: { workspaceId, postId, status: updated.status },
     });
 
+    if (updated.status === PostStatus.SCHEDULED && updated.scheduledAt) {
+      await publishQueueService.enqueuePublish(updated.id, workspaceId, {
+        scheduledAt: updated.scheduledAt,
+      }, { userId, ...ctx });
+    }
+
     return toPostDto(updated);
   },
 
@@ -330,7 +343,12 @@ export const postService = {
       });
     }
 
-    const post = await postPublishService.publishPost(postId, workspaceId);
+    await publishQueueService.publishImmediately(postId, workspaceId, {
+      userId,
+      ...ctx,
+    });
+
+    const post = await this.get(workspaceId, postId);
 
     await auditService.record({
       action: AUDIT.POST_PUBLISHED,
@@ -340,6 +358,6 @@ export const postService = {
       metadata: { workspaceId, postId, status: post.status },
     });
 
-    return toPostDto(post);
+    return post;
   },
 };

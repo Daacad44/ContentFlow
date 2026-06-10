@@ -3,7 +3,7 @@
  * Summary card for a post in the list view.
  */
 import { Link } from 'react-router-dom';
-import { Post, POST_STATUS_META } from '../lib/posts';
+import { Post, POST_STATUS_META, TARGET_STATUS_META } from '../lib/posts';
 import { PLATFORM_META } from '../lib/social';
 
 interface PostCardProps {
@@ -67,20 +67,43 @@ export function PostCard({
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 space-y-2">
         {post.targets.map((t) => {
           const meta = PLATFORM_META[t.connectedAccount.platform];
+          const targetMeta = TARGET_STATUS_META[t.status];
+          const accountDisconnected = t.connectedAccount.status !== 'CONNECTED';
           return (
-            <span
+            <div
               key={t.id}
-              className="inline-flex items-center gap-1 rounded-full border border-ink-500 px-2 py-0.5 text-xs text-muted"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ink-500/60 bg-ink-800/30 px-3 py-2"
             >
-              <span
-                className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: meta.color }}
-              />
-              {t.connectedAccount.displayName ?? meta.label}
-            </span>
+              <span className="inline-flex items-center gap-2 text-xs text-muted">
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: meta.color }}
+                />
+                <span className="text-slate-200">
+                  {t.connectedAccount.displayName ?? meta.label}
+                </span>
+                <span className={`font-medium ${targetMeta.color}`}>{targetMeta.label}</span>
+                {accountDisconnected && (
+                  <span className="text-amber-400">· Reconnect account</span>
+                )}
+              </span>
+              {t.errorMessage && (
+                <span className="text-xs text-red-400">{t.errorMessage}</span>
+              )}
+              {t.platformPostUrl && (
+                <a
+                  href={t.platformPostUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand hover:underline"
+                >
+                  View on platform →
+                </a>
+              )}
+            </div>
           );
         })}
       </div>

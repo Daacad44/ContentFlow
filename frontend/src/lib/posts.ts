@@ -21,6 +21,7 @@ export interface PostTarget {
   id: string;
   status: PostTargetStatus;
   externalPostId: string | null;
+  platformPostUrl: string | null;
   errorMessage: string | null;
   publishedAt: string | null;
   connectedAccount: {
@@ -63,6 +64,16 @@ export const POST_STATUS_META: Record<
   PUBLISHING: { label: 'Publishing', color: 'bg-amber-500/20 text-amber-300' },
   PUBLISHED: { label: 'Published', color: 'bg-emerald-500/20 text-emerald-300' },
   FAILED: { label: 'Failed', color: 'bg-red-500/20 text-red-300' },
+};
+
+export const TARGET_STATUS_META: Record<
+  PostTargetStatus,
+  { label: string; color: string }
+> = {
+  PENDING: { label: 'Pending', color: 'text-slate-400' },
+  PUBLISHING: { label: 'Publishing', color: 'text-amber-400' },
+  PUBLISHED: { label: 'Live', color: 'text-emerald-400' },
+  FAILED: { label: 'Failed', color: 'text-red-400' },
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
