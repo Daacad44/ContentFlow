@@ -20,6 +20,7 @@ export default function OAuthCallbackPage() {
 
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const token = hash.get('access_token');
+    const profileComplete = hash.get('profile_complete') === '1';
 
     (async () => {
       if (!token) {
@@ -29,9 +30,10 @@ export default function OAuthCallbackPage() {
       }
       try {
         setAccessToken(token);
+        window.history.replaceState(null, '', window.location.pathname);
         await refreshUser();
         toast.success('Signed in with Google!');
-        navigate('/dashboard', { replace: true });
+        navigate(profileComplete ? '/dashboard' : '/complete-profile', { replace: true });
       } catch {
         toast.error('Could not complete Google sign-in.');
         navigate('/login', { replace: true });
