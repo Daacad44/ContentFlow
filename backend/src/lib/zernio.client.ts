@@ -51,10 +51,34 @@ export interface ZernioAccountHealth {
   };
 }
 
+export interface ZernioPlatformPostResult {
+  platform?: string;
+  accountId?: string;
+  status: string;
+  platformPostId?: string;
+  platformPostUrl?: string;
+  error?: string;
+  errorMessage?: string;
+}
+
+export interface ZernioCreatePostResult {
+  postId: string;
+  status: string;
+  platformStatus: string;
+  platformPostId?: string;
+  platformPostUrl?: string;
+  errorMessage?: string;
+  platform?: string;
+}
+
 interface ZernioRequestOptions {
   method?: string;
   body?: unknown;
   connectToken?: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 class ZernioClient {
@@ -92,6 +116,50 @@ class ZernioClient {
     }
 
     return data as T;
+  }
+
+  parsePlatformResult(
+    platforms: ZernioPlatformPostResult[] | undefined,
+    accountId: string,
+    platform: string,
+  ): ZernioPlatformPostResult | undefined {
+    if (!platforms?.length) return undefined;
+
+    const byAccount = platforms.find(
+      (p) => p.accountId === accountId || p.accountId === accountId.toString(),
+    );
+    if (byAccount) return byAccount;
+
+    const byPlatform = platforms.find(
+      (p) => p.platform?.toLowerCase() === platform.toLowerCase(),
+    );
+    if (byPlatform) return byPlatform;
+
+    return platforms[0];
+  }
+
+  mapPostToCreateResult(
+    post: {
+      _id: string;
+      status: string;
+      platforms?: ZernioPlatformPostResult[];
+    },
+    accountId: string,
+    platform: string,
+  ): ZernioCreatePostResult {
+    const platformResult = this.parsePlatformResult(post.platforms, accountId, platform);
+    const errorMessage =
+      platformResult?.error ?? platformResult?.errorMessage ?? undefined;
+
+    return {
+      postId: post._id,
+      status: post.status,
+      platformStatus: platformResult?.status ?? post.status,
+      platformPostId: platformResult?.platformPostId,
+      platformPostUrl: platformResult?.platformPostUrl,
+      errorMessage,
+      platform,
+    };
   }
 
   async createProfile(name: string, description?: string): Promise<ZernioProfile> {
@@ -139,7 +207,6 @@ class ZernioClient {
     return data.accounts ?? [];
   }
 
-  /** Zernio has no GET /accounts/{id} — resolve via listAccounts. */
   async getAccount(accountId: string, profileId?: string): Promise<ZernioAccount> {
     const accounts = await this.listAccounts(profileId);
     const account = accounts.find((a) => a._id === accountId);
@@ -165,11 +232,13 @@ class ZernioClient {
     const needsReconnect =
       data.status === 'error' ||
       data.tokenStatus?.needsRefresh === true ||
-      (data.tokenStatus?.valid === false);
-    const healthy = data.status === 'healthy' && tokenValid && !needsReconnect;
+      data.tokenStatus?.valid === false;
+    const canPost = data.permissions?.canPost !== false;
+    const healthy = data.status === 'healthy' && tokenValid && !needsReconnect && canPost;
     const message =
       data.issues?.[0] ??
       data.recommendations?.[0] ??
+      (!canPost ? 'Account lacks permission to publish.' : undefined) ??
       (healthy ? undefined : 'Token may be expired — reconnect the account.');
 
     return { healthy, status: data.status, needsReconnect, message, raw: data };
@@ -264,14 +333,7 @@ class ZernioClient {
     mediaItems?: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
     scheduledAt?: string;
     publishNow?: boolean;
-  }): Promise<{
-    postId: string;
-    status: string;
-    platformStatus: string;
-    platformPostId?: string;
-    platformPostUrl?: string;
-    errorMessage?: string;
-  }> {
+  }): Promise<ZernioCreatePostResult> {
     const body: Record<string, unknown> = {
       content: params.content,
       platforms: [{ platform: params.platform, accountId: params.accountId }],
@@ -291,28 +353,12 @@ class ZernioClient {
       post: {
         _id: string;
         status: string;
-        platforms?: Array<{
-          status: string;
-          platformPostId?: string;
-          platformPostUrl?: string;
-          error?: string;
-          errorMessage?: string;
-        }>;
+        platforms?: ZernioPlatformPostResult[];
       };
       message?: string;
     }>('/posts', { method: 'POST', body });
 
-    const post = data.post;
-    const platformResult = post.platforms?.[0];
-
-    return {
-      postId: post._id,
-      status: post.status,
-      platformStatus: platformResult?.status ?? post.status,
-      platformPostId: platformResult?.platformPostId,
-      platformPostUrl: platformResult?.platformPostUrl,
-      errorMessage: platformResult?.error ?? platformResult?.errorMessage,
-    };
+    return this.mapPostToCreateResult(data.post, params.accountId, params.platform);
   }
 
   async getPost(postId: string) {
@@ -320,14 +366,54 @@ class ZernioClient {
       post: {
         _id: string;
         status: string;
-        platforms?: Array<{
-          status: string;
-          platformPostId?: string;
-          platformPostUrl?: string;
-        }>;
+        platforms?: ZernioPlatformPostResult[];
       };
     }>(`/posts/${postId}`);
     return data.post;
+  }
+
+  /**
+   * Poll Zernio until the platform confirms delivery or reports failure.
+   */
+  async waitForPublishConfirmation(params: {
+    zernioPostId: string;
+    accountId: string;
+    platform: string;
+    maxAttempts?: number;
+    intervalMs?: number;
+  }): Promise<ZernioCreatePostResult> {
+    const maxAttempts = params.maxAttempts ?? 12;
+    const intervalMs = params.intervalMs ?? 5_000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const post = await this.getPost(params.zernioPostId);
+      const result = this.mapPostToCreateResult(post, params.accountId, params.platform);
+
+      if (result.errorMessage) {
+        throw new Error(result.errorMessage);
+      }
+
+      const status = (result.platformStatus || result.status || '').toLowerCase();
+      if (status === 'failed' || status === 'error' || status === 'rejected') {
+        throw new Error(
+          result.errorMessage ??
+            `Platform rejected the post (status: ${result.platformStatus || result.status}).`,
+        );
+      }
+
+      const { isConfirmedPlatformPublish } = await import('../config/postPublishRules');
+      if (isConfirmedPlatformPublish(result)) {
+        return result;
+      }
+
+      if (attempt < maxAttempts) {
+        await sleep(intervalMs);
+      }
+    }
+
+    throw new Error(
+      'Publish confirmation timed out — the platform did not confirm delivery within the expected window.',
+    );
   }
 }
 

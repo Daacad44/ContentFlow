@@ -12,12 +12,15 @@ import activityLogRoutes from './activityLog.routes';
 import notificationRoutes from './notification.routes';
 import billingRoutes from './billing.routes';
 import adminRoutes from './admin.routes';
+import docsRoutes from './docs.routes';
 
 const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ success: true, message: 'ok', data: { uptime: process.uptime() } });
 });
+
+router.use('/', docsRoutes);
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);

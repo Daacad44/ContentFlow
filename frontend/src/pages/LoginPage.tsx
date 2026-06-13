@@ -1,4 +1,5 @@
 /** src/pages/LoginPage.tsx — Module 01 Authentication */
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -11,16 +12,39 @@ import { loginSchema, LoginValues } from '../lib/validation';
 import { getApiErrorMessage } from '../lib/api';
 import axios from 'axios';
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_failed: 'Google sign-in was cancelled or failed. Please try again.',
+  FORBIDDEN: 'Your account has been deactivated. Contact support.',
+};
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
   const from =
     redirect ??
     (location.state as { from?: { pathname: string } })?.from?.pathname ??
     '/workspaces';
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (!error) return;
+    const message =
+      OAUTH_ERROR_MESSAGES[error] ??
+      decodeURIComponent(error).replace(/_/g, ' ') ??
+      'Sign-in failed. Please try again.';
+    toast.error(message);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('error');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
 
   const {
     register,

@@ -2,8 +2,8 @@
  * src/routes/auth.routes.ts
  * Authentication endpoints, mounted at /api/v1/auth and /api/auth.
  */
-import { Router } from 'express';
-import passport from 'passport';
+import { Router, Request, Response, NextFunction } from 'express';
+import passport, { AuthenticateOptions } from 'passport';
 import { authController } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -29,6 +29,18 @@ import {
 } from '../validators/auth.validator';
 
 const router = Router();
+
+type GoogleAuthOptions = AuthenticateOptions & {
+  callbackURL?: string;
+  scope?: string[];
+  state?: string;
+};
+
+function googleAuthenticate(options: GoogleAuthOptions) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate('google', options)(req, res, next);
+  };
+}
 
 // --- Public auth ----------------------------------------------------------
 router.post(
@@ -105,7 +117,7 @@ if (env.googleOAuthEnabled) {
     const redirectOrigin = parseRedirectTarget(req.query.redirect);
     const callbackUrl = resolveGoogleCallbackUrl(req);
     const state = encodeOAuthState(redirectOrigin, callbackUrl);
-    passport.authenticate('google', {
+    googleAuthenticate({
       scope: ['profile', 'email'],
       session: false,
       state,
@@ -120,8 +132,8 @@ if (env.googleOAuthEnabled) {
       const callbackUrl = decodeOAuthCallbackFromState(req.query.state, req);
       passport.authenticate(
         'google',
-        { session: false, callbackURL: callbackUrl },
-        (err, user) => {
+        { session: false, callbackURL: callbackUrl } as GoogleAuthOptions,
+        (err: unknown, user: Express.User | false | undefined) => {
           if (err) {
             const code = err instanceof ApiError ? err.code : 'oauth_failed';
             return res.redirect(`${clientUrl}/login?error=${encodeURIComponent(code)}`);

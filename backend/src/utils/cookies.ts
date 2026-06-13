@@ -30,7 +30,7 @@ function baseCookieOptions(): CookieOptions {
     httpOnly: true,
     secure: sameSite === 'none' || env.isProd,
     sameSite,
-    path: '/api',
+    path: '/',
   };
 }
 

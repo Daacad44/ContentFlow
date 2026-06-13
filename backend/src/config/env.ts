@@ -74,6 +74,13 @@ const envSchema = z.object({
   PUBLISH_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
   PUBLISH_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
   ENABLE_IN_PROCESS_SCHEDULER: booleanString.default('true'),
+  /** Dev-only: allow fake publishes when ZERNIO_API_KEY is unset */
+  ALLOW_SIMULATED_PUBLISH: booleanString.default('false'),
+  /** Production must use Redis/BullMQ for scheduled publishing */
+  REQUIRE_REDIS_IN_PRODUCTION: booleanString.default('true'),
+  /** Poll interval (ms) when waiting for Zernio platform confirmation */
+  PUBLISH_CONFIRM_POLL_MS: z.coerce.number().int().positive().default(5000),
+  PUBLISH_CONFIRM_MAX_ATTEMPTS: z.coerce.number().int().positive().default(12),
 
   // Gemini AI (Agent 06)
   GEMINI_API_KEY: z.string().optional().default(''),
@@ -127,6 +134,9 @@ export const env = {
   stripeEnabled: Boolean(data.STRIPE_SECRET_KEY),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
   publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
+  allowSimulatedPublish: data.ALLOW_SIMULATED_PUBLISH && data.NODE_ENV === 'development',
+  requireRedisInProduction:
+    data.REQUIRE_REDIS_IN_PRODUCTION && data.NODE_ENV === 'production',
 };
 
 export type Env = typeof env;

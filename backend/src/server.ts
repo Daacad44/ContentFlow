@@ -11,7 +11,13 @@ import { publishQueueService } from './services/publishQueue.service';
 import { startPublishWorker } from './workers/publish.worker';
 
 async function bootstrap() {
-  // Verify DB connectivity before accepting traffic.
+  if (env.requireRedisInProduction && !env.redisEnabled) {
+    logger.error(
+      'REDIS_URL is required in production. Set REDIS_URL or REQUIRE_REDIS_IN_PRODUCTION=false.',
+    );
+    process.exit(1);
+  }
+
   try {
     await prisma.$connect();
     logger.info('Database connected');
@@ -20,15 +26,25 @@ async function bootstrap() {
     process.exit(1);
   }
 
+  if (env.googleOAuthEnabled) {
+    logger.info('Google OAuth enabled');
+  } else {
+    logger.warn('Google OAuth disabled — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET');
+  }
+
   const app = createApp();
 
   if (publishQueueService.isQueueEnabled()) {
     startPublishWorker();
     await publishQueueService.syncScheduledPosts();
+    await publishQueueService.syncOverdueScheduledPosts();
     logger.info('BullMQ publish worker started in-process');
+  } else if (env.isProd) {
+    logger.error('Redis/BullMQ is required for publishing in production.');
+    process.exit(1);
   } else if (env.ENABLE_IN_PROCESS_SCHEDULER) {
     postSchedulerService.start();
-    logger.info('In-process post scheduler active (set REDIS_URL for BullMQ)');
+    logger.warn('In-process post scheduler active — set REDIS_URL for BullMQ in production');
   }
 
   const server = app.listen(env.PORT, () => {

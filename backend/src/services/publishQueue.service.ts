@@ -88,7 +88,15 @@ export const publishQueueService = {
       });
     } else {
       if (delay > 0) {
-        logger.info({ postId, delay }, 'Redis unavailable — post remains scheduled for in-process poller');
+        if (env.isProd) {
+          throw ApiError.serviceUnavailable(
+            'Scheduled publishing requires Redis. Set REDIS_URL to enable BullMQ.',
+          );
+        }
+        logger.info(
+          { postId, delay },
+          'Redis unavailable — post remains scheduled for in-process poller',
+        );
         return dbJob;
       }
 
@@ -124,7 +132,11 @@ export const publishQueueService = {
         completedAt: new Date(),
         errorMessage: null,
       });
-      await publishJobService.addLog(publishJobId, 'info', 'Post published successfully');
+      await publishJobService.addLog(
+        publishJobId,
+        'info',
+        'Post delivery confirmed by all target platforms',
+      );
 
       await auditService.record({
         action: AUDIT.PUBLISH_JOB_COMPLETED,
@@ -235,6 +247,37 @@ export const publishQueueService = {
         });
       } catch (err) {
         logger.warn({ err, postId: post.id }, 'Failed to sync scheduled post to queue');
+      }
+    }
+  },
+
+  /** Re-enqueue overdue scheduled posts that lost their BullMQ jobs. */
+  async syncOverdueScheduledPosts() {
+    if (!this.isQueueEnabled()) return;
+
+    const overdue = await prisma.post.findMany({
+      where: {
+        status: PostStatus.SCHEDULED,
+        scheduledAt: { lte: new Date() },
+      },
+      select: { id: true, workspaceId: true, scheduledAt: true },
+      take: 50,
+    });
+
+    for (const post of overdue) {
+      const existing = await publishJobService.findByPostId(post.id);
+      if (existing && (existing.status === 'QUEUED' || existing.status === 'ACTIVE' || existing.status === 'DELAYED')) {
+        continue;
+      }
+
+      try {
+        if (existing?.status === 'FAILED' || existing?.status === 'CANCELLED') {
+          await this.retryJob(post.workspaceId, existing.id);
+        } else {
+          await this.enqueuePublish(post.id, post.workspaceId, { immediate: true });
+        }
+      } catch (err) {
+        logger.warn({ err, postId: post.id }, 'Failed to sync overdue scheduled post');
       }
     }
   },

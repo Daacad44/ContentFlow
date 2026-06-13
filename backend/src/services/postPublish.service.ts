@@ -1,6 +1,6 @@
 /**
  * src/services/postPublish.service.ts
- * Publishes posts to connected social accounts via Zernio (or simulates in dev).
+ * Publishes posts to connected social accounts via Zernio with platform verification.
  */
 import { PostStatus, PostTargetStatus, SocialAccountStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
@@ -105,11 +105,17 @@ export const postPublishService = {
     });
 
     let allSucceeded = true;
+    let anyPublished = false;
 
     for (const target of post.targets) {
+      if (target.status === PostTargetStatus.PUBLISHED) {
+        anyPublished = true;
+        continue;
+      }
+
       await prisma.postTarget.update({
         where: { id: target.id },
-        data: { status: PostTargetStatus.PUBLISHING },
+        data: { status: PostTargetStatus.PUBLISHING, errorMessage: null },
       });
 
       try {
@@ -134,6 +140,17 @@ export const postPublishService = {
             errorMessage: null,
           },
         });
+        anyPublished = true;
+
+        logger.info(
+          {
+            postId,
+            targetId: target.id,
+            externalPostId: result.externalPostId,
+            platformPostUrl: result.platformPostUrl,
+          },
+          'Platform confirmed post delivery',
+        );
       } catch (err) {
         allSucceeded = false;
         const message = err instanceof Error ? err.message : 'Publish failed.';
@@ -154,7 +171,7 @@ export const postPublishService = {
       where: { id: postId },
       data: {
         status: finalStatus,
-        publishedAt: allSucceeded ? new Date() : null,
+        publishedAt: allSucceeded ? new Date() : anyPublished ? post.publishedAt : null,
       },
       include: postInclude,
     });
@@ -174,37 +191,63 @@ async function publishToAccount(params: {
   zernioAccountId: string;
   content: string;
   media: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
-}): Promise<{ externalPostId: string | null; platformPostUrl?: string }> {
-  if (env.zernioEnabled) {
-    const result = await zernioClient.createPost({
-      platform: params.platform,
-      accountId: params.zernioAccountId,
-      content: params.content,
-      mediaItems: params.media.length > 0 ? params.media : undefined,
-      publishNow: true,
-    });
-
-    if (result.errorMessage) {
-      throw new Error(result.errorMessage);
-    }
-
-    if (!isConfirmedPlatformPublish(result)) {
-      throw new Error(
-        result.errorMessage ??
-          `Publish was not confirmed by the platform (status: ${result.platformStatus || result.status}). ` +
-            'The post may have been saved as a draft in Zernio only.',
+}): Promise<{ externalPostId: string; platformPostUrl?: string }> {
+  if (!env.zernioEnabled) {
+    if (env.allowSimulatedPublish) {
+      logger.warn(
+        { accountId: params.zernioAccountId },
+        'Zernio disabled — simulated publish (dev only)',
       );
+      return { externalPostId: `sim-${Date.now()}` };
     }
-
-    return {
-      externalPostId: result.platformPostId ?? result.postId,
-      platformPostUrl: result.platformPostUrl,
-    };
+    throw new Error(
+      'Social publishing is not configured (ZERNIO_API_KEY missing). Cannot publish to connected accounts.',
+    );
   }
 
-  logger.info(
-    { accountId: params.zernioAccountId },
-    'Zernio disabled — simulating publish',
-  );
-  return { externalPostId: `sim-${Date.now()}` };
+  const health = await zernioClient.checkAccountHealth(params.zernioAccountId);
+  if (!health.healthy) {
+    throw new Error(
+      health.message ??
+        `Connected account is not healthy (${health.status}). Reconnect the account before publishing.`,
+    );
+  }
+
+  const initial = await zernioClient.createPost({
+    platform: params.platform,
+    accountId: params.zernioAccountId,
+    content: params.content,
+    mediaItems: params.media.length > 0 ? params.media : undefined,
+    publishNow: true,
+  });
+
+  if (initial.errorMessage) {
+    throw new Error(initial.errorMessage);
+  }
+
+  let confirmed = initial;
+  if (!isConfirmedPlatformPublish(initial)) {
+    confirmed = await zernioClient.waitForPublishConfirmation({
+      zernioPostId: initial.postId,
+      accountId: params.zernioAccountId,
+      platform: params.platform,
+    });
+  }
+
+  if (!isConfirmedPlatformPublish(confirmed)) {
+    throw new Error(
+      confirmed.errorMessage ??
+        `Publish was not confirmed by the platform (status: ${confirmed.platformStatus || confirmed.status}).`,
+    );
+  }
+
+  const platformPostId = confirmed.platformPostId?.trim();
+  if (!platformPostId) {
+    throw new Error('Platform did not return a post ID — delivery could not be verified.');
+  }
+
+  return {
+    externalPostId: platformPostId,
+    platformPostUrl: confirmed.platformPostUrl,
+  };
 }

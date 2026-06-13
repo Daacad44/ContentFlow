@@ -5,7 +5,7 @@
 import { Worker, Job } from 'bullmq';
 import { env } from '../config/env';
 import { getRedisConnection, closeRedisConnection } from '../config/redis';
-import { closePublishQueue, PUBLISH_QUEUE_NAME, type PublishJobData } from '../queues/publish.queue';
+import { closePublishQueue, PUBLISH_QUEUE_NAME, getPublishDeadLetterQueue, type PublishJobData } from '../queues/publish.queue';
 import { publishQueueService } from '../services/publishQueue.service';
 import { publishJobService } from '../services/publishJob.service';
 import { prisma } from '../config/prisma';
@@ -54,7 +54,25 @@ export function startPublishWorker(): Worker<PublishJobData> {
         errorMessage: err.message,
         completedAt: new Date(),
       });
-      await publishJobService.addLog(job.data.publishJobId, 'error', `All attempts exhausted: ${err.message}`);
+      await publishJobService.addLog(
+        job.data.publishJobId,
+        'error',
+        `All attempts exhausted: ${err.message}`,
+      );
+
+      try {
+        const dlq = getPublishDeadLetterQueue();
+        await dlq.add('dead-letter', job.data, {
+          jobId: `dlq-${job.data.publishJobId}-${Date.now()}`,
+        });
+        await publishJobService.addLog(
+          job.data.publishJobId,
+          'error',
+          'Job moved to dead-letter queue after exhausting retries',
+        );
+      } catch (dlqErr) {
+        logger.error({ dlqErr, publishJobId: job.data.publishJobId }, 'Failed to enqueue dead-letter job');
+      }
     }
   });
 

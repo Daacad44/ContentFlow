@@ -1,5 +1,5 @@
 /** src/components/GoogleButton.tsx — kicks off the backend Google OAuth flow. */
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 export function GoogleButton({ label = 'Continue with Google' }: { label?: string }) {
   const redirect = encodeURIComponent(window.location.origin);
