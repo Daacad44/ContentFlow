@@ -13,6 +13,7 @@ import notificationRoutes from './notification.routes';
 import billingRoutes from './billing.routes';
 import adminRoutes from './admin.routes';
 import docsRoutes from './docs.routes';
+import cronRoutes from './cron.routes';
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use('/activity-logs', activityLogRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
+router.use('/internal/cron', cronRoutes);
 
 export default router;

@@ -2,13 +2,15 @@ import { resolveMediaStorage } from '../../src/config/env';
 import { STORED_MEDIA_FILENAME } from '../../src/services/mediaUpload.service';
 
 describe('resolveMediaStorage', () => {
-  it('uses Cloudinary automatically when it is configured', () => {
-    expect(resolveMediaStorage('auto', true)).toBe('cloudinary');
-    expect(resolveMediaStorage('auto', false)).toBe('local');
+  it('prefers Supabase, then Cloudinary, then local disk', () => {
+    expect(resolveMediaStorage('auto', { supabase: true, cloudinary: true })).toBe('supabase');
+    expect(resolveMediaStorage('auto', { supabase: false, cloudinary: true })).toBe('cloudinary');
+    expect(resolveMediaStorage('auto', { supabase: false, cloudinary: false })).toBe('local');
   });
 
-  it('respects an explicit local setting', () => {
-    expect(resolveMediaStorage('local', true)).toBe('local');
+  it('respects an explicit setting', () => {
+    expect(resolveMediaStorage('local', { supabase: true, cloudinary: true })).toBe('local');
+    expect(resolveMediaStorage('cloudinary', { supabase: true, cloudinary: true })).toBe('cloudinary');
   });
 });
 

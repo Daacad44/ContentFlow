@@ -33,7 +33,7 @@ async function bootstrap() {
     if (env.isProd) logger.warn(msg);
     else logger.info('Media storage: local disk');
   } else {
-    logger.info('Media storage: Cloudinary');
+    logger.info(`Media storage: ${env.mediaStorage}`);
   }
 
   if (env.googleOAuthEnabled) {

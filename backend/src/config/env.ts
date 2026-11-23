@@ -9,6 +9,11 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Prisma's schema declares `directUrl`; outside Supabase the direct URL is the same database.
+if (!process.env.DIRECT_URL && process.env.DATABASE_URL) {
+  process.env.DIRECT_URL = process.env.DATABASE_URL;
+}
+
 const booleanString = z
   .string()
   .transform((v) => v === 'true' || v === '1')
@@ -24,6 +29,8 @@ const envSchema = z.object({
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /** Direct (non-pooled) connection used by Prisma migrations. Defaults to DATABASE_URL. */
+  DIRECT_URL: z.string().optional(),
 
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be >= 16 chars'),
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET must be >= 16 chars'),
@@ -66,9 +73,17 @@ const envSchema = z.object({
   ZERNIO_API_URL: z.string().url().default('https://zernio.com/api/v1'),
   TOKEN_ENCRYPTION_KEY: z.string().optional().default(''),
   UPLOAD_DIR: z.string().default('./uploads'),
-  // Where post media is stored: "cloudinary" (durable, recommended for production),
-  // "local" (server disk, dev only), or "auto" (Cloudinary when configured, else local).
-  MEDIA_STORAGE: z.enum(['auto', 'local', 'cloudinary']).default('auto'),
+  // Where post media is stored: "supabase" or "cloudinary" (durable, for production),
+  // "local" (server disk, dev only), or "auto" (Supabase, then Cloudinary, else local).
+  MEDIA_STORAGE: z.enum(['auto', 'local', 'cloudinary', 'supabase']).default('auto'),
+
+  // Supabase Storage (post media)
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
+  SUPABASE_STORAGE_BUCKET: z.string().default('post-media'),
+
+  /** Shared secret for scheduled-job endpoints (Vercel Cron / Supabase pg_cron). */
+  CRON_SECRET: z.string().optional().default(''),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(25),
 
   // Redis / BullMQ (Agent 05)
@@ -106,21 +121,30 @@ const envSchema = z.object({
   ENFORCE_PLAN_LIMITS: booleanString.default('false'),
 });
 
-/** Resolves the effective media storage driver from MEDIA_STORAGE and Cloudinary availability. */
+type MediaStorageSetting = 'auto' | 'local' | 'cloudinary' | 'supabase';
+export type MediaStorageDriver = 'local' | 'cloudinary' | 'supabase';
+
+/** Resolves the effective media storage driver from MEDIA_STORAGE and which providers are configured. */
 export function resolveMediaStorage(
-  setting: 'auto' | 'local' | 'cloudinary',
-  cloudinaryConfigured: boolean,
-): 'local' | 'cloudinary' {
+  setting: MediaStorageSetting,
+  configured: { supabase: boolean; cloudinary: boolean },
+): MediaStorageDriver {
   if (setting === 'local') return 'local';
-  if (setting === 'cloudinary') {
-    if (!cloudinaryConfigured) {
+  if (setting === 'supabase' || setting === 'cloudinary') {
+    if (!configured[setting]) {
+      const vars =
+        setting === 'supabase'
+          ? 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
+          : 'CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET';
       // eslint-disable-next-line no-console
-      console.error('❌ MEDIA_STORAGE=cloudinary requires CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.');
+      console.error(`❌ MEDIA_STORAGE=${setting} requires ${vars}.`);
       process.exit(1);
     }
-    return 'cloudinary';
+    return setting;
   }
-  return cloudinaryConfigured ? 'cloudinary' : 'local';
+  if (configured.supabase) return 'supabase';
+  if (configured.cloudinary) return 'cloudinary';
+  return 'local';
 }
 
 const parsed = envSchema.safeParse(process.env);
@@ -158,9 +182,16 @@ export const env = {
     data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
   ),
   stripeEnabled: Boolean(data.STRIPE_SECRET_KEY),
-  mediaStorage: resolveMediaStorage(data.MEDIA_STORAGE, Boolean(
-    data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
-  )),
+  supabaseStorageEnabled: Boolean(data.SUPABASE_URL && data.SUPABASE_SERVICE_ROLE_KEY),
+  mediaStorage: resolveMediaStorage(data.MEDIA_STORAGE, {
+    supabase: Boolean(data.SUPABASE_URL && data.SUPABASE_SERVICE_ROLE_KEY),
+    cloudinary: Boolean(
+      data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
+    ),
+  }),
+  cronEnabled: Boolean(data.CRON_SECRET),
+  /** True when running as a Vercel serverless function. */
+  isServerless: Boolean(process.env.VERCEL),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
   publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
   allowSimulatedPublish: data.ALLOW_SIMULATED_PUBLISH && data.NODE_ENV === 'development',

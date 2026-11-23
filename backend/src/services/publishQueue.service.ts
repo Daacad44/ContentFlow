@@ -88,16 +88,17 @@ export const publishQueueService = {
       });
     } else {
       if (delay > 0) {
-        if (env.isProd) {
+        if (env.isProd && !env.cronEnabled) {
           throw ApiError.serviceUnavailable(
-            'Scheduled publishing requires Redis. Set REDIS_URL to enable BullMQ.',
+            'Scheduled publishing requires Redis (REDIS_URL) or a cron trigger (CRON_SECRET).',
           );
         }
-        logger.info(
-          { postId, delay },
-          'Redis unavailable — post remains scheduled for in-process poller',
-        );
-        return dbJob;
+        await publishJobService.updateStatus(dbJob.id, 'DELAYED');
+        await publishJobService.addLog(dbJob.id, 'info', 'Waiting for scheduled time', {
+          scheduledFor: scheduledFor?.toISOString(),
+        });
+        logger.info({ postId, delay }, 'Post scheduled — will be published by the scheduler');
+        return publishJobService.get(workspaceId, dbJob.id);
       }
 
       await this.processPublishJob(dbJob.id, postId, workspaceId, ctx);

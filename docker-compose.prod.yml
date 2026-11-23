@@ -37,6 +37,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL:-${DATABASE_URL}}
       REDIS_URL: redis://redis:6379
       REQUIRE_REDIS_IN_PRODUCTION: "true"
       ENABLE_IN_PROCESS_SCHEDULER: "false"
@@ -58,6 +59,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL:-${DATABASE_URL}}
       REDIS_URL: redis://redis:6379
       REQUIRE_REDIS_IN_PRODUCTION: "true"
       ENABLE_IN_PROCESS_SCHEDULER: "false"

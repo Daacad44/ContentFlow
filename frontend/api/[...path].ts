@@ -4,6 +4,26 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+// Forward the raw request body untouched (JSON, multipart uploads, Stripe webhooks).
+export const config = { api: { bodyParser: false } };
+
+async function readRawBody(req: VercelRequest): Promise<Uint8Array<ArrayBuffer>> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const bytes = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk);
+    chunks.push(bytes);
+    total += bytes.length;
+  }
+  const out = new Uint8Array(new ArrayBuffer(total));
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
 const HOP_BY_HOP = new Set([
   'connection',
   'keep-alive',
@@ -47,17 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method ?? 'GET';
   const init: RequestInit = { method, headers, redirect: 'manual' };
 
-  if (method !== 'GET' && method !== 'HEAD' && req.body) {
-    const body =
-      typeof req.body === 'string'
-        ? req.body
-        : Buffer.isBuffer(req.body)
-          ? req.body
-          : JSON.stringify(req.body);
-    init.body = body;
-    if (!headers.has('content-type')) {
-      headers.set('content-type', 'application/json');
-    }
+  if (method !== 'GET' && method !== 'HEAD') {
+    const body = await readRawBody(req);
+    if (body.length > 0) init.body = body;
   }
 
   try {
@@ -65,9 +77,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(upstream.status);
 
     upstream.headers.forEach((value, key) => {
-      if (HOP_BY_HOP.has(key.toLowerCase())) return;
+      const lower = key.toLowerCase();
+      // set-cookie is copied separately below; fetch joins multiple cookies into one value.
+      // content-encoding/length are dropped because fetch already decoded the body.
+      if (HOP_BY_HOP.has(lower) || lower === 'set-cookie' || lower === 'content-encoding' || lower === 'content-length') return;
       res.setHeader(key, value);
     });
+    const cookies = upstream.headers.getSetCookie?.() ?? [];
+    if (cookies.length > 0) res.setHeader('set-cookie', cookies);
 
     const buffer = Buffer.from(await upstream.arrayBuffer());
     res.send(buffer);
