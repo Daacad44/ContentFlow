@@ -11,14 +11,14 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Field = forwardRef<HTMLInputElement, FieldProps>(
-  ({ label, error, id, ...props }, ref) => {
+  ({ label, error, id, className, ...props }, ref) => {
     const inputId = id ?? props.name;
     return (
-      <div>
+      <div className="min-w-0">
         <label htmlFor={inputId} className="cf-label">
           {label}
         </label>
-        <input id={inputId} ref={ref} className="cf-input" {...props} />
+        <input id={inputId} ref={ref} className={className ? `cf-input ${className}` : 'cf-input'} {...props} />
         {error && <p className="cf-error">{error}</p>}
       </div>
     );

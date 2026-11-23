@@ -13,7 +13,7 @@ export function AuthLayout({
   illustration?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-cf-bg p-6">
+    <div className="flex min-h-screen items-center justify-center bg-cf-bg px-4 py-8 sm:p-6">
       <div className="grid w-full max-w-4xl overflow-hidden rounded-lg border border-cf-border bg-cf-surface md:grid-cols-2">
         <div className="relative hidden flex-col justify-between bg-cf-navy-900 p-10 md:flex">
           <Logo size="lg" />
@@ -28,8 +28,8 @@ export function AuthLayout({
           </div>
         </div>
 
-        <div className="flex items-center justify-center p-8 sm:p-10">
-          <div className="w-full max-w-sm">{children}</div>
+        <div className="flex min-w-0 items-center justify-center p-6 sm:p-10">
+          <div className="w-full min-w-0 max-w-sm">{children}</div>
         </div>
       </div>
     </div>

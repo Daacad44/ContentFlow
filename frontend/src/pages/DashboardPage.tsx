@@ -14,14 +14,14 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <h1 className="text-3xl font-extrabold text-white">
+      <h1 className="text-2xl font-extrabold text-white sm:text-3xl">
         Welcome back, {user?.fullName?.split(' ')[0]} 👋
       </h1>
       <p className="mt-2 text-muted">
         Manage your workspaces, teams, and permissions from one place.
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Workspaces" value={loading ? '…' : String(workspaces.length)} />
         <StatCard
           label="Active workspace"
@@ -36,7 +36,7 @@ export default function DashboardPage() {
       </div>
 
       {activeWorkspace && (
-        <div className="mt-8 rounded-xl border border-ink-500/60 bg-ink-700/60 p-6">
+        <div className="mt-6 rounded-xl border border-ink-500/60 bg-ink-700/60 p-4 sm:mt-8 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted">Current workspace</p>
@@ -54,7 +54,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4">
         <QuickLink to="/posts" title="Posts" desc="Create, schedule & publish" />
         <QuickLink to="/ai-content" title="AI Content" desc="Captions, hashtags & calendars" />
         <QuickLink to="/studio" title="Creative Studio" desc="AI images, posters & brand kit" />

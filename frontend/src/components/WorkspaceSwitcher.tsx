@@ -33,11 +33,11 @@ export function WorkspaceSwitcher() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-lg border border-ink-500 bg-ink-800/70 px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-700"
+        className="flex min-w-0 items-center gap-2 rounded-lg border border-ink-500 bg-ink-800/70 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-ink-700 sm:px-3"
       >
-        <span className="max-w-[140px] truncate">{activeWorkspace.name}</span>
+        <span className="max-w-[110px] truncate sm:max-w-[160px]">{activeWorkspace.name}</span>
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${roleBadgeColor(activeWorkspace.role)}`}
+          className={`hidden rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:inline ${roleBadgeColor(activeWorkspace.role)}`}
         >
           {activeWorkspace.role}
         </span>
@@ -47,7 +47,7 @@ export function WorkspaceSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-ink-500 bg-ink-800 py-1 shadow-xl">
+          <div className="absolute right-0 z-20 mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-xl border border-ink-500 bg-ink-800 py-1 shadow-xl">
             <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
               Your workspaces
             </p>

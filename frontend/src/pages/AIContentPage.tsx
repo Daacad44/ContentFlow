@@ -73,10 +73,10 @@ export default function AIContentPage() {
     <AppShell>
       <PageHeader title="AI Content Generator" />
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         <SubNav items={SUB_MENU} active={activeTab} onChange={setActiveTab} />
 
-        <div className="flex-1 space-y-6">
+        <div className="min-w-0 flex-1 space-y-6">
           <div className="cf-card space-y-4">
             <div>
               <label className="cf-label">What do you want to write about?</label>
