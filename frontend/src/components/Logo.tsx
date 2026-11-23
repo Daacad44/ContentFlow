@@ -1,5 +1,11 @@
 /** src/components/Logo.tsx — ContentFlow wordmark + mark. */
-export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+export function Logo({
+  size = 'md',
+  textClassName = '',
+}: {
+  size?: 'sm' | 'md' | 'lg';
+  textClassName?: string;
+}) {
   const dim = size === 'lg' ? 44 : size === 'sm' ? 28 : 34;
   const text = size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-lg';
   return (
@@ -20,7 +26,7 @@ export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
           </linearGradient>
         </defs>
       </svg>
-      <span className={`font-bold tracking-tight text-cf-text ${text}`}>ContentFlow</span>
+      <span className={`font-bold tracking-tight text-cf-text ${text} ${textClassName}`}>ContentFlow</span>
     </div>
   );
 }

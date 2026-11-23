@@ -29,7 +29,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-3 sm:mb-6 sm:gap-4">
       <div>
         <h1 className="cf-page-title">{title}</h1>
         {subtitle && <p className="cf-page-subtitle">{subtitle}</p>}
@@ -265,15 +265,15 @@ export function SubNav({
   onChange: (key: string) => void;
 }) {
   return (
-    <nav className="flex w-48 shrink-0 flex-col gap-1 border-r border-cf-border pr-4">
+    <nav className="-mx-4 flex shrink-0 gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:w-48 md:flex-col md:gap-1 md:overflow-visible md:border-r md:border-cf-border md:px-0 md:pb-0 md:pr-4">
       {items.map((item) => (
         <button
           key={item.key}
           onClick={() => onChange(item.key)}
-          className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+          className={`shrink-0 whitespace-nowrap rounded-lg border px-3 py-2 text-left text-sm font-medium transition md:border-transparent ${
             active === item.key
-              ? 'bg-brand text-white'
-              : 'text-cf-muted hover:bg-cf-navy-800 hover:text-cf-text'
+              ? 'border-brand bg-brand text-white'
+              : 'border-cf-border text-cf-muted hover:bg-cf-navy-800 hover:text-cf-text'
           }`}
         >
           {item.label}

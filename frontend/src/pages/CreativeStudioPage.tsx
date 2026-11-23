@@ -96,13 +96,13 @@ export default function CreativeStudioPage() {
     <AppShell>
       <PageHeader title="AI Creative Studio" />
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         <SubNav items={SUB_MENU} active={activeTab} onChange={setActiveTab} />
 
-        <div className="flex flex-1 gap-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-6 lg:flex-row">
           {activeTab === 'image' && (
             <>
-              <div className="flex-1 space-y-4">
+              <div className="min-w-0 flex-1 space-y-4">
                 <div className="cf-card space-y-4">
                   <div>
                     <label className="cf-label">Image description</label>
@@ -163,7 +163,7 @@ export default function CreativeStudioPage() {
                 </div>
               </div>
 
-              <div className="w-80 shrink-0">
+              <div className="w-full lg:w-80 lg:shrink-0">
                 <h3 className="mb-3 text-sm font-semibold text-cf-text">Generated Images</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {assets.slice(0, 4).map((asset) => (
