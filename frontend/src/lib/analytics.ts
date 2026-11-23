@@ -14,6 +14,32 @@ export interface DashboardMetrics {
   periodDays: number;
 }
 
+export interface PlatformMetricsStatus {
+  available: boolean;
+  reason?: string;
+}
+
+export interface TimelinePoint {
+  date: string;
+  count: number;
+}
+
+export interface ReachAnalytics {
+  publishedTargets: number;
+  byPlatform: { platform: string; accountName: string | null; published: number; failed: number }[];
+  totalReach: number | null;
+  totalImpressions: number | null;
+  platformMetrics: PlatformMetricsStatus;
+}
+
+export interface GrowthAnalytics {
+  postsByStatus: { status: string; count: number }[];
+  members: { total: number; new: number };
+  accounts: { total: number; new: number };
+  timeline: TimelinePoint[];
+  growthRate: number | null;
+}
+
 function wsPath(workspaceId: string, path: string) {
   return `/workspaces/${workspaceId}/analytics${path}`;
 }
@@ -26,10 +52,10 @@ export const analyticsApi = {
     api.get<{ data: { engagement: Record<string, unknown> } }>(wsPath(workspaceId, '/engagement'), { params: { from, to } }),
 
   reach: (workspaceId: string, from?: string, to?: string) =>
-    api.get<{ data: { reach: Record<string, unknown> } }>(wsPath(workspaceId, '/reach'), { params: { from, to } }),
+    api.get<{ data: { reach: ReachAnalytics } }>(wsPath(workspaceId, '/reach'), { params: { from, to } }),
 
   growth: (workspaceId: string, from?: string, to?: string) =>
-    api.get<{ data: { growth: Record<string, unknown> } }>(wsPath(workspaceId, '/growth'), { params: { from, to } }),
+    api.get<{ data: { growth: GrowthAnalytics } }>(wsPath(workspaceId, '/growth'), { params: { from, to } }),
 
   performance: (workspaceId: string, from?: string, to?: string) =>
     api.get(wsPath(workspaceId, '/performance'), { params: { from, to } }),
