@@ -85,6 +85,8 @@ const envSchema = z.object({
   /** Shared secret for scheduled-job endpoints (Vercel Cron / Supabase pg_cron). */
   CRON_SECRET: z.string().optional().default(''),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(25),
+  /** Limit for browser-to-Supabase direct uploads (videos). Supabase Free caps files at 50MB. */
+  MAX_DIRECT_UPLOAD_MB: z.coerce.number().int().positive().default(50),
 
   // Redis / BullMQ (Agent 05)
   REDIS_URL: z.string().optional().default(''),
@@ -194,6 +196,7 @@ export const env = {
   /** True when running as a Vercel serverless function. */
   isServerless: Boolean(process.env.VERCEL),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+  MAX_DIRECT_UPLOAD_BYTES: data.MAX_DIRECT_UPLOAD_MB * 1024 * 1024,
   publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
   allowSimulatedPublish: data.ALLOW_SIMULATED_PUBLISH && data.NODE_ENV === 'development',
   requireRedisInProduction:

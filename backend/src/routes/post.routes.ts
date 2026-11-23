@@ -18,6 +18,7 @@ import { workspaceIdParamSchema } from '../validators/workspace.validator';
 import {
   postIdParamSchema,
   createPostSchema,
+  directUploadSchema,
   updatePostSchema,
   listPostsQuerySchema,
 } from '../validators/post.validator';
@@ -54,6 +55,14 @@ router.post(
   requireWorkspacePermission(WORKSPACE_PERMISSIONS.POST_CREATE),
   upload.single('file'),
   asyncHandler(postController.uploadMedia),
+);
+
+router.post(
+  '/media/upload-url',
+  validate({ params: workspaceIdParamSchema, body: directUploadSchema }),
+  requireWorkspaceMember(),
+  requireWorkspacePermission(WORKSPACE_PERMISSIONS.POST_CREATE),
+  asyncHandler(postController.createDirectUpload),
 );
 
 router.get(

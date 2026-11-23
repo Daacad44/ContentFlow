@@ -78,4 +78,12 @@ export const postController = {
     const media = await mediaUploadService.saveFile(req.params.workspaceId, req.file);
     return created(res, { media }, 'Media uploaded.');
   },
+
+  async createDirectUpload(req: Request, res: Response) {
+    const result = await mediaUploadService.createDirectUpload(req.params.workspaceId, req.body);
+    if (!result) {
+      throw ApiError.notFound('Direct uploads are not available; use the multipart endpoint.');
+    }
+    return created(res, result, 'Upload URL created.');
+  },
 };

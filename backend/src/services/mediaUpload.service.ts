@@ -111,4 +111,34 @@ export const mediaUploadService = {
       ...meta,
     };
   },
+
+  /**
+   * Prepares a direct browser upload to Supabase Storage. Returns null when Supabase
+   * is not the active storage, so the client falls back to the multipart endpoint.
+   */
+  async createDirectUpload(
+    workspaceId: string,
+    file: { filename: string; mimeType: string; size: number },
+  ): Promise<{ uploadUrl: string; media: StoredMedia } | null> {
+    if (env.mediaStorage !== 'supabase') return null;
+
+    this.validateMimeType(file.mimeType);
+    if (file.size > env.MAX_DIRECT_UPLOAD_BYTES) {
+      throw ApiError.badRequest(
+        `File too large. Maximum size is ${Math.round(env.MAX_DIRECT_UPLOAD_BYTES / 1024 / 1024)}MB.`,
+      );
+    }
+
+    const objectPath = `${workspaceId}/${randomUUID()}${ALLOWED_MIME_TYPES[file.mimeType]}`;
+    try {
+      const signed = await supabaseStorageClient.createSignedUploadUrl(objectPath);
+      return {
+        uploadUrl: signed.uploadUrl,
+        media: { url: signed.url, filename: file.filename, mimeType: file.mimeType, size: file.size },
+      };
+    } catch (err) {
+      logger.error({ err, workspaceId }, 'Supabase signed upload URL failed');
+      throw ApiError.serviceUnavailable('Media storage is unavailable. Please try again.');
+    }
+  },
 };

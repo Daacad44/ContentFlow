@@ -253,7 +253,7 @@ export default function PostComposerPage() {
               workspaceId={activeWorkspace.id}
               media={media}
               onChange={setMedia}
-              onUpload={(file) => postsApi.uploadMedia(activeWorkspace.id, file)}
+              onUpload={(file, onProgress) => postsApi.uploadMedia(activeWorkspace.id, file, onProgress)}
               disabled={submitting}
             />
           </div>

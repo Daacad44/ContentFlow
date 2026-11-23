@@ -57,4 +57,40 @@ export const supabaseStorageClient = {
 
     return { path: objectPath, url: this.publicUrl(objectPath, bucket) };
   },
+
+  /**
+   * Creates a one-time signed URL the browser can PUT a file to, so large files (videos)
+   * go straight to Supabase instead of through the serverless function's ~4.5MB body limit.
+   */
+  async createSignedUploadUrl(
+    objectPath: string,
+    bucket = env.SUPABASE_STORAGE_BUCKET,
+  ): Promise<{ uploadUrl: string; path: string; url: string }> {
+    const res = await fetch(
+      `${baseUrl()}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodePath(objectPath)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      },
+    );
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Supabase signed upload URL failed (${res.status}): ${detail.slice(0, 300)}`);
+    }
+
+    const data = (await res.json()) as { url?: string };
+    if (!data.url) throw new Error('Supabase signed upload URL response had no url.');
+
+    return {
+      uploadUrl: `${baseUrl()}/storage/v1${data.url}`,
+      path: objectPath,
+      url: this.publicUrl(objectPath, bucket),
+    };
+  },
 };
