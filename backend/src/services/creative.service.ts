@@ -6,10 +6,13 @@ import { CreativeAssetType, Prisma, UsageMetric } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { geminiClient } from '../lib/gemini.client';
 import { cloudinaryClient } from '../lib/cloudinary.client';
+import { supabaseStorageClient } from '../lib/supabaseStorage.client';
+import { randomUUID } from 'crypto';
 import { auditService, AUDIT } from './audit.service';
 import { billingService } from './billing.service';
 import { ApiError } from '../utils/apiError';
 import { env } from '../config/env';
+import { logger } from '../utils/logger';
 
 interface CreativeContext {
   userId?: string;
@@ -137,10 +140,19 @@ export const creativeService = {
           cloudinaryPublicId = uploaded.publicId;
           width = uploaded.width;
           height = uploaded.height;
+        } else if (supabaseStorageClient.isEnabled()) {
+          const ext = image.mimeType === 'image/jpeg' ? '.jpg' : image.mimeType === 'image/webp' ? '.webp' : '.png';
+          const uploaded = await supabaseStorageClient.upload(
+            `${workspaceId}/creatives/${randomUUID()}${ext}`,
+            Buffer.from(image.base64, 'base64'),
+            image.mimeType,
+          );
+          url = uploaded.url;
         } else {
           url = `data:${image.mimeType};base64,${image.base64}`;
         }
-      } catch {
+      } catch (err) {
+        logger.warn({ err, type }, 'AI image generation failed; using placeholder');
         url = await this.generatePlaceholderUrl(type, brand, input);
       }
     } else {
