@@ -2,13 +2,14 @@
  * src/services/invitation.service.ts
  * Workspace invitation lifecycle: create, list, revoke, accept, decline.
  */
-import { InvitationStatus, WorkspaceRole } from '@prisma/client';
+import { InvitationStatus, UsageMetric, WorkspaceRole } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/apiError';
 import { generateOpaqueToken, hashToken } from '../utils/tokens';
 import { ASSIGNABLE_WORKSPACE_ROLES } from '../config/workspacePermissions';
 import { emailService } from './email.service';
 import { auditService, AUDIT } from './audit.service';
+import { billingService } from './billing.service';
 import { toPublicUser } from './auth.service';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -119,6 +120,9 @@ export const invitationService = {
     if (pending) {
       throw ApiError.conflict('A pending invitation already exists for this email.');
     }
+
+    // Members plus pending invitations count toward the plan's team-member limit.
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.TEAM_MEMBERS);
 
     const rawToken = generateOpaqueToken();
     const tokenHash = hashToken(rawToken);
