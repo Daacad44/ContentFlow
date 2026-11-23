@@ -3,6 +3,7 @@
  * Multi-select connected accounts for post targeting.
  */
 import { ConnectedAccount, PLATFORM_META } from '../lib/social';
+import { PlatformIcon } from './PlatformIcon';
 
 interface PlatformSelectorProps {
   accounts: ConnectedAccount[];
@@ -53,12 +54,7 @@ export function PlatformSelector({
                 : 'border-ink-500 bg-ink-800/40 hover:border-ink-400'
             } disabled:opacity-50`}
           >
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
-              style={{ backgroundColor: meta.color }}
-            >
-              {meta.icon}
-            </span>
+            <PlatformIcon platform={account.platform} size="md" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-white">
                 {account.displayName ?? account.username ?? meta.label}

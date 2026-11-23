@@ -15,6 +15,8 @@ export interface TikTokDraft {
   discloseCommercial: boolean;
   brandOrganic: boolean;
   brandContent: boolean;
+  autoAddMusic: boolean;
+  sendAsDraft: boolean;
   consentGiven: boolean;
 }
 
@@ -26,6 +28,8 @@ export const EMPTY_TIKTOK_DRAFT: TikTokDraft = {
   discloseCommercial: false,
   brandOrganic: false,
   brandContent: false,
+  autoAddMusic: true,
+  sendAsDraft: false,
   consentGiven: false,
 };
 
@@ -46,6 +50,8 @@ export function draftFromSettings(settings: TikTokSettings | null): TikTokDraft 
     discloseCommercial: settings.commercialContent !== 'none',
     brandOrganic: settings.commercialContent === 'brand_organic',
     brandContent: settings.commercialContent === 'brand_content',
+    autoAddMusic: settings.autoAddMusic ?? false,
+    sendAsDraft: settings.sendAsDraft ?? false,
     consentGiven: true,
   };
 }
@@ -71,6 +77,8 @@ export function settingsFromDraft(draft: TikTokDraft): { error: string } | { set
         : draft.brandContent
           ? 'brand_content'
           : 'brand_organic',
+      autoAddMusic: draft.autoAddMusic,
+      sendAsDraft: draft.sendAsDraft,
       consentGiven: true,
     },
   };
@@ -191,6 +199,47 @@ export function TikTokSettingsPanel({ workspaceId, account, mediaKind, value, on
             );
           })}
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg bg-ink-900/40 p-3">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-white">
+          <span aria-hidden>♪</span> Music
+        </p>
+        {mediaKind === 'photo' ? (
+          <label className="flex items-start gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-brand"
+              checked={value.autoAddMusic}
+              onChange={(e) => set({ autoAddMusic: e.target.checked })}
+              disabled={disabled || value.sendAsDraft}
+            />
+            <span>
+              Add music automatically
+              <span className="block text-xs text-muted">TikTok picks a recommended sound for the photos.</span>
+            </span>
+          </label>
+        ) : (
+          <p className="text-xs text-muted">
+            A video keeps the sound in its file. To post with a TikTok sound, record the music into
+            the video, or send it to the TikTok app below and pick a sound there.
+          </p>
+        )}
+        <label className="flex items-start gap-2 text-sm text-slate-200">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 accent-brand"
+            checked={value.sendAsDraft}
+            onChange={(e) => set({ sendAsDraft: e.target.checked })}
+            disabled={disabled}
+          />
+          <span>
+            Send to TikTok app to choose a sound
+            <span className="block text-xs text-muted">
+              Goes to your TikTok inbox as a draft. Open TikTok, add any trending sound, then post.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="space-y-2">

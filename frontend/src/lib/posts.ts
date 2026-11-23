@@ -46,6 +46,8 @@ export interface TikTokSettings {
   allowDuet: boolean;
   allowStitch: boolean;
   commercialContent: 'none' | 'brand_organic' | 'brand_content';
+  autoAddMusic?: boolean;
+  sendAsDraft?: boolean;
   consentGiven: true;
 }
 

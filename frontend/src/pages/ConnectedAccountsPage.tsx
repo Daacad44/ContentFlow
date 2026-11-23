@@ -10,6 +10,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { getApiErrorMessage } from '../lib/api';
 import { socialApi, ConnectedAccount, SocialPlatform, PLATFORM_META } from '../lib/social';
 import { PageHeader, StatusBadge, ProgressRing } from '../components/ui/ContentFlowUI';
+import { PlatformIcon } from '../components/PlatformIcon';
 
 const PLATFORMS: SocialPlatform[] = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN'];
 
@@ -233,20 +234,24 @@ function AccountCard({
     <div className="cf-card space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          {account.avatarUrl ? (
-            <img
-              src={account.avatarUrl}
-              alt=""
-              className="h-11 w-11 shrink-0 rounded-full border border-cf-border object-cover sm:h-12 sm:w-12"
+          <div className="relative shrink-0">
+            {account.avatarUrl ? (
+              <img
+                src={account.avatarUrl}
+                alt=""
+                className="h-11 w-11 rounded-full border border-cf-border object-cover sm:h-12 sm:w-12"
+              />
+            ) : (
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-cf-navy-800 text-sm font-semibold text-cf-text sm:h-12 sm:w-12">
+                {(account.displayName ?? account.username ?? meta.label).slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <PlatformIcon
+              platform={account.platform}
+              size="xs"
+              className="absolute -bottom-1 -right-1 ring-2 ring-cf-navy-900"
             />
-          ) : (
-            <span
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white sm:h-12 sm:w-12"
-              style={{ backgroundColor: meta.color }}
-            >
-              {meta.icon}
-            </span>
-          )}
+          </div>
           <div className="min-w-0">
             <p className="font-medium text-cf-text">{meta.label}</p>
             <p className="truncate text-sm text-cf-muted">{handle}</p>

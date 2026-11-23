@@ -53,18 +53,18 @@ export function StatCard({
   sparkline?: number[];
 }) {
   return (
-    <div className="cf-card p-5">
-      <p className="text-xs font-medium text-cf-muted">{label}</p>
+    <div className="cf-card min-w-0 p-4 sm:p-5">
+      <p className="truncate text-xs font-medium text-cf-muted">{label}</p>
       <div className="mt-2 flex items-end justify-between gap-2">
-        <div>
-          <p className="text-2xl font-bold text-cf-text">{value}</p>
+        <div className="min-w-0">
+          <p className="truncate text-xl font-bold text-cf-text sm:text-2xl">{value}</p>
           {change && (
             <p className={`mt-1 text-xs font-medium ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
               {change}
             </p>
           )}
         </div>
-        {sparkline && <Sparkline data={sparkline} />}
+        {sparkline && <div className="hidden sm:block"><Sparkline data={sparkline} /></div>}
       </div>
     </div>
   );
@@ -173,7 +173,27 @@ export function DataTable({
   emptyMessage?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-cf-border">
+    <>
+      {/* Phones: each row becomes a labelled card */}
+      <div className="space-y-2 sm:hidden">
+        {rows.length === 0 ? (
+          <p className="rounded-lg border border-cf-border px-4 py-8 text-center text-sm text-cf-muted">
+            {emptyMessage}
+          </p>
+        ) : (
+          rows.map((row, i) => (
+            <dl key={i} className="space-y-1.5 rounded-lg border border-cf-border bg-cf-navy-900/40 p-3 text-sm">
+              {row.map((cell, j) => (
+                <div key={j} className="flex items-start justify-between gap-3">
+                  <dt className="shrink-0 text-xs text-cf-muted">{headers[j]}</dt>
+                  <dd className="min-w-0 break-words text-right text-cf-text">{cell}</dd>
+                </div>
+              ))}
+            </dl>
+          ))
+        )}
+      </div>
+      <div className="hidden overflow-x-auto rounded-lg border border-cf-border sm:block">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-cf-border bg-cf-navy-900">
           <tr>
@@ -204,7 +224,8 @@ export function DataTable({
           )}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -34,6 +34,10 @@ export const tiktokSettingsSchema = z
     allowDuet: z.boolean().default(false),
     allowStitch: z.boolean().default(false),
     commercialContent: z.enum(['none', 'brand_organic', 'brand_content']).default('none'),
+    /** Photo posts only: TikTok adds a recommended sound to the slideshow. */
+    autoAddMusic: z.boolean().default(false),
+    /** Send to the creator's TikTok inbox instead of posting, so they can add a sound in the app. */
+    sendAsDraft: z.boolean().default(false),
     consentGiven: z.literal(true, {
       errorMap: () => ({ message: "You must agree to TikTok's Music Usage Confirmation." }),
     }),
