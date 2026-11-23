@@ -80,7 +80,7 @@ export const geminiClient = {
 
     const genAI = getClient();
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
+      model: env.GEMINI_IMAGE_MODEL,
       generationConfig: {
         // @ts-expect-error responseModalities is supported by image-capable models
         responseModalities: ['Text', 'Image'],

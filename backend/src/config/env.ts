@@ -102,7 +102,8 @@ const envSchema = z.object({
 
   // Gemini AI (Agent 06)
   GEMINI_API_KEY: z.string().optional().default(''),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash-preview-05-20'),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_IMAGE_MODEL: z.string().default('gemini-2.5-flash-image'),
 
   // Cloudinary (Agent 07)
   CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
