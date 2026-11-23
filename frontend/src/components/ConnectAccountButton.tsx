@@ -12,9 +12,10 @@ interface Props {
   platform: SocialPlatform;
   disabled?: boolean;
   label?: string;
+  hint?: string;
 }
 
-export function ConnectAccountButton({ workspaceId, platform, disabled, label }: Props) {
+export function ConnectAccountButton({ workspaceId, platform, disabled, label, hint }: Props) {
   const [loading, setLoading] = useState(false);
   const meta = PLATFORM_META[platform];
 
@@ -31,9 +32,10 @@ export function ConnectAccountButton({ workspaceId, platform, disabled, label }:
 
   return (
     <button
+      type="button"
       onClick={handleConnect}
       disabled={disabled || loading}
-      className="flex items-center gap-3 rounded-lg border border-cf-border bg-cf-navy-900 px-5 py-4 text-left transition hover:border-brand/40 hover:bg-cf-navy-800 disabled:opacity-50"
+      className="flex w-full items-center gap-3 rounded-lg border border-cf-border bg-cf-navy-900 px-5 py-4 text-left transition hover:border-brand/40 hover:bg-cf-navy-800 disabled:opacity-50"
     >
       <span
         className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
@@ -45,7 +47,7 @@ export function ConnectAccountButton({ workspaceId, platform, disabled, label }:
         <p className="font-medium text-cf-text">
           {loading ? 'Connecting…' : (label ?? `Connect ${meta.label}`)}
         </p>
-        <p className="text-sm text-cf-muted">Authorize via OAuth</p>
+        <p className="text-sm text-cf-muted">{hint ?? 'Sign in and choose the account'}</p>
       </div>
     </button>
   );
