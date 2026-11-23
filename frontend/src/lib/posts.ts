@@ -132,7 +132,38 @@ export const postsApi = {
     );
   },
 
-  async uploadMedia(workspaceId: string, file: File): Promise<PostMediaInput> {
+  /**
+   * Uploads a file. With Supabase storage the browser sends the file straight to Supabase
+   * via a signed URL (needed for videos larger than the API's ~4.5MB body limit);
+   * otherwise it falls back to the multipart endpoint.
+   */
+  async uploadMedia(
+    workspaceId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<PostMediaInput> {
+    const mimeType = file.type || 'application/octet-stream';
+    let direct: { uploadUrl: string; media: PostMediaInput } | null = null;
+    try {
+      const res = await api.post<{ data: { uploadUrl: string; media: PostMediaInput } }>(
+        `/workspaces/${workspaceId}/posts/media/upload-url`,
+        { filename: file.name, mimeType, size: file.size },
+      );
+      direct = res.data.data;
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status !== 404) {
+        const message = (err as { response?: { data?: { error?: { message?: string } } } })
+          .response?.data?.error?.message;
+        throw new Error(message ?? 'Upload failed.');
+      }
+    }
+
+    if (direct) {
+      await putWithProgress(direct.uploadUrl, file, mimeType, onProgress);
+      return direct.media;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -155,6 +186,34 @@ export const postsApi = {
       throw new Error(data.error?.message ?? 'Upload failed.');
     }
 
+    onProgress?.(100);
     return data.data!.media;
   },
 };
+
+function putWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress?: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}).`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Upload failed. Check your connection.'));
+    xhr.send(file);
+  });
+}

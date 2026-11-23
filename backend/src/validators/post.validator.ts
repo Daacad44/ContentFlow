@@ -17,6 +17,12 @@ const postMediaItemSchema = z.object({
   size: z.number().int().positive().max(50 * 1024 * 1024),
 });
 
+export const directUploadSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  mimeType: z.string().min(1).max(100),
+  size: z.number().int().positive(),
+});
+
 export const createPostSchema = z
   .object({
     content: z.string().trim().min(1, 'Content is required.').max(10000),

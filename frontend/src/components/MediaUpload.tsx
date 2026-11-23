@@ -6,11 +6,14 @@ import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { PostMediaInput } from '../lib/posts';
 
+const MAX_FILE_MB = 50;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+
 interface MediaUploadProps {
   workspaceId: string;
   media: PostMediaInput[];
   onChange: (media: PostMediaInput[]) => void;
-  onUpload: (file: File) => Promise<PostMediaInput>;
+  onUpload: (file: File, onProgress?: (percent: number) => void) => Promise<PostMediaInput>;
   disabled?: boolean;
   maxFiles?: number;
 }
@@ -24,6 +27,7 @@ export function MediaUpload({
 }: MediaUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ index: number; total: number; percent: number } | null>(null);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || disabled) return;
@@ -39,8 +43,14 @@ export function MediaUpload({
 
     try {
       const uploaded: PostMediaInput[] = [];
-      for (const file of toUpload) {
-        const item = await onUpload(file);
+      for (const [index, file] of toUpload.entries()) {
+        if (file.size > MAX_FILE_BYTES) {
+          throw new Error(`${file.name} is larger than ${MAX_FILE_MB}MB.`);
+        }
+        setProgress({ index: index + 1, total: toUpload.length, percent: 0 });
+        const item = await onUpload(file, (percent) =>
+          setProgress({ index: index + 1, total: toUpload.length, percent }),
+        );
         uploaded.push(item);
       }
       onChange([...media, ...uploaded]);
@@ -49,6 +59,7 @@ export function MediaUpload({
       toast.error(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
       setUploading(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -75,9 +86,21 @@ export function MediaUpload({
           onChange={(e) => void handleFiles(e.target.files)}
         />
         <p className="text-sm text-muted">
-          {uploading ? 'Uploading…' : 'Click to upload images or videos'}
+          {uploading
+            ? progress && progress.total > 1
+              ? `Uploading ${progress.index}/${progress.total}… ${progress.percent}%`
+              : `Uploading… ${progress?.percent ?? 0}%`
+            : 'Tap to upload images or videos'}
         </p>
-        <p className="mt-1 text-xs text-muted">JPEG, PNG, GIF, WebP, MP4, MOV — max 25MB</p>
+        {uploading && (
+          <div className="mx-auto mt-3 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-ink-600">
+            <div
+              className="h-full bg-brand transition-[width]"
+              style={{ width: `${progress?.percent ?? 0}%` }}
+            />
+          </div>
+        )}
+        <p className="mt-1 text-xs text-muted">JPEG, PNG, GIF, WebP, MP4, MOV, max {MAX_FILE_MB}MB</p>
       </div>
 
       {media.length > 0 && (
@@ -88,7 +111,7 @@ export function MediaUpload({
               className="group relative overflow-hidden rounded-lg border border-ink-500 bg-ink-800/50"
             >
               {item.mimeType.startsWith('video/') ? (
-                <video src={item.url} className="aspect-square w-full object-cover" muted />
+                <video src={item.url} className="aspect-square w-full object-cover" muted playsInline preload="metadata" />
               ) : (
                 <img src={item.url} alt={item.filename} className="aspect-square w-full object-cover" />
               )}
@@ -96,7 +119,7 @@ export function MediaUpload({
                 <button
                   type="button"
                   onClick={() => remove(i)}
-                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white transition sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   Remove
                 </button>
