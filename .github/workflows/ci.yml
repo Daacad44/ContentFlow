@@ -56,7 +56,8 @@ jobs:
       - run: npm test
 
   frontend:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright 1.60 cannot install browsers on.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
