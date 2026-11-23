@@ -6,6 +6,7 @@ import {
   AnalyticsMetricType,
   AnalyticsPeriod,
   PostStatus,
+  PostTargetStatus,
   Prisma,
   ReportStatus,
 } from '@prisma/client';
@@ -15,6 +16,55 @@ import { auditService, AUDIT } from './audit.service';
 interface DateRange {
   from: Date;
   to: Date;
+}
+
+/** Marker returned wherever a metric needs platform insights APIs that are not integrated yet. */
+export const PLATFORM_METRICS_UNAVAILABLE = {
+  available: false as const,
+  reason: 'Reach, impressions and engagement require platform insights, which are not connected yet.',
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Upper bound on timeline length so a huge custom range cannot build an enormous array. */
+const MAX_TIMELINE_DAYS = 366;
+
+/**
+ * Buckets dates per UTC day across the whole range, including days with zero items,
+ * so charts get a continuous series.
+ */
+export function buildDailyTimeline(dates: Date[], range: DateRange): { date: string; count: number }[] {
+  const buckets = new Map<string, number>();
+  for (const d of dates) {
+    const key = d.toISOString().slice(0, 10);
+    buckets.set(key, (buckets.get(key) ?? 0) + 1);
+  }
+
+  const start = Date.UTC(range.from.getUTCFullYear(), range.from.getUTCMonth(), range.from.getUTCDate());
+  const end = Date.UTC(range.to.getUTCFullYear(), range.to.getUTCMonth(), range.to.getUTCDate());
+  if (end < start) return [];
+
+  const days = Math.min(Math.floor((end - start) / DAY_MS) + 1, MAX_TIMELINE_DAYS);
+  const firstDay = end - (days - 1) * DAY_MS;
+
+  const timeline: { date: string; count: number }[] = [];
+  for (let i = 0; i < days; i++) {
+    const key = new Date(firstDay + i * DAY_MS).toISOString().slice(0, 10);
+    timeline.push({ date: key, count: buckets.get(key) ?? 0 });
+  }
+  return timeline;
+}
+
+/**
+ * Percentage change of the second half of a timeline versus the first half.
+ * Returns null when there is no baseline to compare against.
+ */
+export function halfOverHalfGrowth(timeline: { count: number }[]): number | null {
+  if (timeline.length < 2) return null;
+  const mid = Math.floor(timeline.length / 2);
+  const first = timeline.slice(0, mid).reduce((sum, d) => sum + d.count, 0);
+  const second = timeline.slice(timeline.length - mid).reduce((sum, d) => sum + d.count, 0);
+  if (first === 0) return null;
+  return Math.round(((second - first) / first) * 100);
 }
 
 function periodBounds(period: AnalyticsPeriod, date: Date): { start: Date; end: Date } {
@@ -120,39 +170,52 @@ export const analyticsService = {
       postsWithMedia,
       mediaRate: posts.length > 0 ? Math.round((postsWithMedia / posts.length) * 100) : 0,
       byPlatform,
-      estimatedEngagement: {
-        likes: totalTargets * 12,
-        comments: totalTargets * 3,
-        shares: totalTargets * 2,
-        clicks: totalTargets * 8,
-      },
+      // Likes, comments, shares and clicks come from platform insights APIs, which are
+      // not integrated yet. Report them as unavailable instead of inventing numbers.
+      platformMetrics: PLATFORM_METRICS_UNAVAILABLE,
     };
   },
 
+  /**
+   * Distribution of published / failed deliveries per connected account.
+   * Reach and impressions require platform insights APIs (not integrated yet), so they
+   * are returned as `null` with `platformMetrics.available = false` — never estimated.
+   */
   async getReachAnalytics(workspaceId: string, range: DateRange) {
     const accounts = await prisma.connectedAccount.findMany({
       where: { workspaceId, status: 'CONNECTED' },
+      select: { id: true, platform: true, displayName: true, username: true },
     });
 
-    const publishedTargets = await prisma.postTarget.count({
+    const targetCounts = await prisma.postTarget.groupBy({
+      by: ['connectedAccountId', 'status'],
       where: {
-        status: 'PUBLISHED',
-        publishedAt: { gte: range.from, lte: range.to },
         post: { workspaceId },
+        status: { in: [PostTargetStatus.PUBLISHED, PostTargetStatus.FAILED] },
+        updatedAt: { gte: range.from, lte: range.to },
       },
+      _count: true,
     });
+
+    const countFor = (accountId: string, status: PostTargetStatus) =>
+      targetCounts.find((c) => c.connectedAccountId === accountId && c.status === status)?._count ?? 0;
 
     const byPlatform = accounts.map((acc) => ({
       platform: acc.platform,
       accountName: acc.displayName ?? acc.username,
-      estimatedReach: publishedTargets * 150 + Math.floor(Math.random() * 500),
-      impressions: publishedTargets * 300 + Math.floor(Math.random() * 1000),
+      published: countFor(acc.id, PostTargetStatus.PUBLISHED),
+      failed: countFor(acc.id, PostTargetStatus.FAILED),
     }));
 
-    const totalReach = byPlatform.reduce((sum, p) => sum + p.estimatedReach, 0);
-    const totalImpressions = byPlatform.reduce((sum, p) => sum + p.impressions, 0);
+    const publishedTargets = byPlatform.reduce((sum, p) => sum + p.published, 0);
 
-    return { totalReach, totalImpressions, byPlatform, publishedTargets };
+    return {
+      publishedTargets,
+      byPlatform,
+      totalReach: null,
+      totalImpressions: null,
+      platformMetrics: PLATFORM_METRICS_UNAVAILABLE,
+    };
   },
 
   async getGrowthAnalytics(workspaceId: string, range: DateRange) {
@@ -179,9 +242,7 @@ export const analyticsService = {
       members: { total: members, new: newMembers },
       accounts: { total: accounts, new: newAccounts },
       timeline,
-      growthRate: timeline.length > 1
-        ? Math.round(((timeline[timeline.length - 1].count - timeline[0].count) / Math.max(timeline[0].count, 1)) * 100)
-        : 0,
+      growthRate: halfOverHalfGrowth(timeline),
     };
   },
 
@@ -192,13 +253,10 @@ export const analyticsService = {
       orderBy: { createdAt: 'asc' },
     });
 
-    const buckets: Record<string, number> = {};
-    for (const post of posts) {
-      const key = post.createdAt.toISOString().slice(0, 10);
-      buckets[key] = (buckets[key] ?? 0) + 1;
-    }
-
-    return Object.entries(buckets).map(([date, count]) => ({ date, count }));
+    return buildDailyTimeline(
+      posts.map((p) => p.createdAt),
+      range,
+    );
   },
 
   async getPerformanceReport(workspaceId: string, range: DateRange) {
