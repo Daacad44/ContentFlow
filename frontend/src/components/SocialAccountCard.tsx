@@ -6,6 +6,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '../lib/api';
 import { socialApi, ConnectedAccount, PLATFORM_META } from '../lib/social';
+import { PlatformIcon } from './PlatformIcon';
 
 interface Props {
   workspaceId: string;
@@ -90,12 +91,7 @@ export function SocialAccountCard({
             className="h-12 w-12 rounded-full border border-ink-500 object-cover"
           />
         ) : (
-          <span
-            className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white"
-            style={{ backgroundColor: meta.color }}
-          >
-            {meta.icon}
-          </span>
+          <PlatformIcon platform={account.platform} size="lg" />
         )}
         <div>
           <p className="font-medium text-white">

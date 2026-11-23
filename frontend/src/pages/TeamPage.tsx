@@ -185,18 +185,18 @@ export default function TeamPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-ink-800/80 text-xs uppercase text-muted">
                 <tr>
-                  <th className="px-4 py-3">Member</th>
+                  <th className="w-full px-3 py-3 sm:px-4">Member</th>
                   <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Joined</th>
+                  <th className="hidden px-4 py-3 sm:table-cell">Joined</th>
                   {canManageMembers && <th className="px-4 py-3 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-500/40">
                 {members.map((m) => (
                   <tr key={m.id} className="bg-ink-700/40">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-white">{m.user.fullName}</p>
-                      <p className="text-xs text-muted">{m.user.email}</p>
+                    <td className="max-w-0 px-3 py-3 sm:px-4">
+                      <p className="truncate font-medium text-white">{m.user.fullName}</p>
+                      <p className="truncate text-xs text-muted">{m.user.email}</p>
                     </td>
                     <td className="px-4 py-3">
                       {canManageMembers && m.role !== 'OWNER' ? (
@@ -221,7 +221,7 @@ export default function TeamPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-muted">
+                    <td className="hidden px-4 py-3 text-muted sm:table-cell">
                       {new Date(m.joinedAt).toLocaleDateString()}
                     </td>
                     {canManageMembers && (

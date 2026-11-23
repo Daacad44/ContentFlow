@@ -67,6 +67,8 @@ export interface ZernioTikTokSettings {
   allowDuet: boolean;
   allowStitch: boolean;
   commercialContent: 'none' | 'brand_organic' | 'brand_content';
+  autoAddMusic?: boolean;
+  sendAsDraft?: boolean;
 }
 
 export interface ZernioTikTokCreatorInfo {
@@ -377,7 +379,10 @@ class ZernioClient {
       body.tiktokSettings = {
         privacy_level: t.privacyLevel,
         allow_comment: t.allowComment,
-        ...(isPhoto ? { media_type: 'photo' } : { allow_duet: t.allowDuet, allow_stitch: t.allowStitch }),
+        ...(isPhoto
+          ? { media_type: 'photo', auto_add_music: !!t.autoAddMusic }
+          : { allow_duet: t.allowDuet, allow_stitch: t.allowStitch }),
+        ...(t.sendAsDraft ? { draft: true } : {}),
         commercialContentType: t.commercialContent,
         isBrandOrganicPost: t.commercialContent === 'brand_organic',
         brandPartnerPromote: t.commercialContent === 'brand_content',

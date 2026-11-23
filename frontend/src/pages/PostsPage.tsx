@@ -102,12 +102,12 @@ export default function PostsPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
                 activeTab === tab.key
                   ? 'bg-brand/15 text-brand'
                   : 'text-muted hover:bg-ink-700 hover:text-white'

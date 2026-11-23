@@ -6,6 +6,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '../lib/api';
 import { socialApi, SocialPlatform, PLATFORM_META } from '../lib/social';
+import { PlatformIcon } from './PlatformIcon';
 
 interface Props {
   workspaceId: string;
@@ -37,12 +38,7 @@ export function ConnectAccountButton({ workspaceId, platform, disabled, label, h
       disabled={disabled || loading}
       className="flex w-full items-center gap-3 rounded-lg border border-cf-border bg-cf-navy-900 px-5 py-4 text-left transition hover:border-brand/40 hover:bg-cf-navy-800 disabled:opacity-50"
     >
-      <span
-        className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
-        style={{ backgroundColor: meta.color }}
-      >
-        {meta.icon}
-      </span>
+      <PlatformIcon platform={platform} size="md" />
       <div>
         <p className="font-medium text-cf-text">
           {loading ? 'Connecting…' : (label ?? `Connect ${meta.label}`)}
