@@ -76,7 +76,7 @@ export const TARGET_STATUS_META: Record<
   FAILED: { label: 'Failed', color: 'text-red-400' },
 };
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 export const postsApi = {
   list(workspaceId: string, params?: { status?: PostStatus; page?: number; limit?: number }) {
