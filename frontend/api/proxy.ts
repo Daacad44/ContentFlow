@@ -1,6 +1,8 @@
 /**
- * Vercel serverless proxy — forwards /api/* to the Express backend (Railway/VPS).
- * Set API_PROXY_URL in Vercel project env, e.g. https://your-app.up.railway.app
+ * Vercel serverless proxy: forwards /api/* to the Express backend.
+ * vercel.json rewrites /api/:path* to /api/proxy?__path=:path*, because outside
+ * Next.js a [...path] file only matches a single path segment.
+ * Set API_PROXY_URL in the Vercel project env, e.g. https://content-flow-api.vercel.app
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -36,6 +38,18 @@ const HOP_BY_HOP = new Set([
   'host',
 ]);
 
+export function buildTargetUrl(
+  backend: string,
+  rawPath: string | string[] | undefined,
+  search: URLSearchParams,
+): string {
+  const pathPart = (Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '')).replace(/^\/+/, '');
+  const params = new URLSearchParams(search);
+  params.delete('__path');
+  const query = params.toString();
+  return `${backend}/api/${pathPart}${query ? `?${query}` : ''}`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const backend = process.env.API_PROXY_URL?.replace(/\/$/, '');
 
@@ -51,12 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const segments = req.query.path;
-  const pathPart = Array.isArray(segments) ? segments.join('/') : (segments ?? '');
-
   const host = req.headers.host ?? 'localhost';
   const incoming = new URL(req.url ?? '/', `https://${host}`);
-  const targetUrl = `${backend}/api/${pathPart}${incoming.search}`;
+  const targetUrl = buildTargetUrl(backend, req.query.__path, incoming.searchParams);
 
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
