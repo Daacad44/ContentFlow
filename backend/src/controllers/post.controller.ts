@@ -75,7 +75,7 @@ export const postController = {
       throw ApiError.badRequest('No file uploaded.');
     }
 
-    const media = mediaUploadService.saveFile(req.params.workspaceId, req.file);
+    const media = await mediaUploadService.saveFile(req.params.workspaceId, req.file);
     return created(res, { media }, 'Media uploaded.');
   },
 };

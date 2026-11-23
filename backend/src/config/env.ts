@@ -66,6 +66,9 @@ const envSchema = z.object({
   ZERNIO_API_URL: z.string().url().default('https://zernio.com/api/v1'),
   TOKEN_ENCRYPTION_KEY: z.string().optional().default(''),
   UPLOAD_DIR: z.string().default('./uploads'),
+  // Where post media is stored: "cloudinary" (durable, recommended for production),
+  // "local" (server disk, dev only), or "auto" (Cloudinary when configured, else local).
+  MEDIA_STORAGE: z.enum(['auto', 'local', 'cloudinary']).default('auto'),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(25),
 
   // Redis / BullMQ (Agent 05)
@@ -96,6 +99,23 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional().default(''),
   STRIPE_PUBLISHABLE_KEY: z.string().optional().default(''),
 });
+
+/** Resolves the effective media storage driver from MEDIA_STORAGE and Cloudinary availability. */
+export function resolveMediaStorage(
+  setting: 'auto' | 'local' | 'cloudinary',
+  cloudinaryConfigured: boolean,
+): 'local' | 'cloudinary' {
+  if (setting === 'local') return 'local';
+  if (setting === 'cloudinary') {
+    if (!cloudinaryConfigured) {
+      // eslint-disable-next-line no-console
+      console.error('❌ MEDIA_STORAGE=cloudinary requires CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.');
+      process.exit(1);
+    }
+    return 'cloudinary';
+  }
+  return cloudinaryConfigured ? 'cloudinary' : 'local';
+}
 
 const parsed = envSchema.safeParse(process.env);
 
@@ -132,6 +152,9 @@ export const env = {
     data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
   ),
   stripeEnabled: Boolean(data.STRIPE_SECRET_KEY),
+  mediaStorage: resolveMediaStorage(data.MEDIA_STORAGE, Boolean(
+    data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_SECRET,
+  )),
   MAX_UPLOAD_SIZE_BYTES: data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
   publicApiUrl: data.PUBLIC_API_URL ?? data.API_URL,
   allowSimulatedPublish: data.ALLOW_SIMULATED_PUBLISH && data.NODE_ENV === 'development',

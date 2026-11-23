@@ -91,6 +91,37 @@ export const cloudinaryClient = {
     });
   },
 
+  /** Uploads post media (image or video) from memory. */
+  async uploadMedia(
+    buffer: Buffer,
+    options: { folder: string; resourceType: 'image' | 'video'; tags?: string[] },
+  ): Promise<UploadResult> {
+    ensureConfigured();
+
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: options.folder,
+          tags: options.tags,
+          resource_type: options.resourceType,
+          use_filename: false,
+          unique_filename: true,
+        },
+        (err, result) => {
+          if (err || !result) return reject(err ?? new Error('Upload failed'));
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+            width: result.width,
+            height: result.height,
+            format: result.format,
+          });
+        },
+      );
+      stream.end(buffer);
+    });
+  },
+
   buildTransformationUrl(
     publicId: string,
     transforms: Record<string, string | number>,
