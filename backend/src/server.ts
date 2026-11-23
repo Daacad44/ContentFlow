@@ -26,6 +26,16 @@ async function bootstrap() {
     process.exit(1);
   }
 
+  if (env.mediaStorage === 'local') {
+    const msg =
+      'Post media is stored on local disk (UPLOAD_DIR). Files are lost when the container is ' +
+      'replaced unless a persistent volume is mounted. Configure Cloudinary for production.';
+    if (env.isProd) logger.warn(msg);
+    else logger.info('Media storage: local disk');
+  } else {
+    logger.info('Media storage: Cloudinary');
+  }
+
   if (env.googleOAuthEnabled) {
     logger.info('Google OAuth enabled');
   } else {

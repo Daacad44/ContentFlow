@@ -1,21 +1,42 @@
 /**
  * src/services/mediaUpload.service.ts
- * Local media storage for post attachments.
+ * Storage for post attachments.
+ *
+ * - "cloudinary": durable object storage with a public HTTPS URL that social platforms
+ *   (via Zernio) can fetch. Use this in production.
+ * - "local": files on the API server's disk under UPLOAD_DIR. Fine for development, but
+ *   files are lost when a container is replaced unless a persistent volume is mounted.
  */
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { env } from '../config/env';
+import { cloudinaryClient } from '../lib/cloudinary.client';
 import { ApiError } from '../utils/apiError';
+import { logger } from '../utils/logger';
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-]);
+const ALLOWED_MIME_TYPES: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+};
+
+/**
+ * Stored local filenames are `<uuid><ext>` (older uploads: `<uuid>-<sanitized original name>`).
+ * The random UUID makes URLs unguessable; the media route only serves names of this shape.
+ */
+export const STORED_MEDIA_FILENAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.(jpg|png|gif|webp|mp4|mov)|-[A-Za-z0-9._-]{1,200})$/i;
+
+export interface StoredMedia {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
 
 function ensureUploadDir(workspaceId: string): string {
   const dir = path.join(env.UPLOAD_DIR, workspaceId);
@@ -23,20 +44,16 @@ function ensureUploadDir(workspaceId: string): string {
   return dir;
 }
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-}
-
 export const mediaUploadService = {
   validateMimeType(mimeType: string) {
-    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    if (!ALLOWED_MIME_TYPES[mimeType]) {
       throw ApiError.badRequest(
         'Unsupported file type. Allowed: JPEG, PNG, GIF, WebP, MP4, MOV.',
       );
     }
   },
 
-  saveFile(workspaceId: string, file: Express.Multer.File) {
+  async saveFile(workspaceId: string, file: Express.Multer.File): Promise<StoredMedia> {
     if (file.size > env.MAX_UPLOAD_SIZE_BYTES) {
       throw ApiError.badRequest(
         `File too large. Maximum size is ${Math.round(env.MAX_UPLOAD_SIZE_BYTES / 1024 / 1024)}MB.`,
@@ -45,20 +62,33 @@ export const mediaUploadService = {
 
     this.validateMimeType(file.mimetype);
 
-    const dir = ensureUploadDir(workspaceId);
-    const safeName = sanitizeFilename(file.originalname);
-    const storedName = `${randomUUID()}-${safeName}`;
-    const destPath = path.join(dir, storedName);
-
-    fs.writeFileSync(destPath, file.buffer);
-
-    const url = `${env.publicApiUrl}/api/v1/media/${workspaceId}/${storedName}`;
-
-    return {
-      url,
+    const meta = {
       filename: file.originalname,
       mimeType: file.mimetype,
       size: file.size,
+    };
+
+    if (env.mediaStorage === 'cloudinary') {
+      try {
+        const uploaded = await cloudinaryClient.uploadMedia(file.buffer, {
+          folder: `contentflow/workspaces/${workspaceId}/posts`,
+          resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
+          tags: ['contentflow', 'post-media', `workspace:${workspaceId}`],
+        });
+        return { url: uploaded.url, ...meta };
+      } catch (err) {
+        logger.error({ err, workspaceId }, 'Cloudinary media upload failed');
+        throw ApiError.serviceUnavailable('Media storage is unavailable. Please try again.');
+      }
+    }
+
+    const dir = ensureUploadDir(workspaceId);
+    const storedName = `${randomUUID()}${ALLOWED_MIME_TYPES[file.mimetype]}`;
+    await fs.promises.writeFile(path.join(dir, storedName), file.buffer);
+
+    return {
+      url: `${env.publicApiUrl}/api/v1/media/${workspaceId}/${storedName}`,
+      ...meta,
     };
   },
 };
