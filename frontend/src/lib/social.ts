@@ -38,7 +38,24 @@ export const PLATFORM_META: Record<
   TIKTOK: { label: 'TikTok', color: '#FE2C55', icon: 'tt' },
 };
 
+export interface TikTokCreatorInfo {
+  creator?: { nickname?: string; avatarUrl?: string; isVerified?: boolean; canPostMore?: boolean };
+  privacyLevels?: Array<{ value: string; label: string }>;
+  postingLimits?: {
+    maxVideoDurationSec?: number;
+    interactionSettings?: Record<string, { enabled: boolean } | null>;
+  };
+}
+
 export const socialApi = {
+  tiktokCreatorInfo(workspaceId: string, accountId: string, mediaType: 'video' | 'photo') {
+    return api.get<{ data: { creatorInfo: TikTokCreatorInfo } }>(
+      `/workspaces/${workspaceId}/social/${accountId}/tiktok/creator-info`,
+      { params: { mediaType } },
+    );
+  },
+
+
   list(workspaceId: string) {
     return api.get<{ data: { accounts: ConnectedAccount[] } }>(
       `/workspaces/${workspaceId}/social`,

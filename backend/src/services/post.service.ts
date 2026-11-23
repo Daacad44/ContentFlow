@@ -2,13 +2,22 @@
  * src/services/post.service.ts
  * Create, read, update, delete, and schedule workspace posts.
  */
-import { PostStatus, Prisma, SocialAccountStatus, UsageMetric } from '@prisma/client';
+import {
+  PostStatus,
+  Prisma,
+  PublishJobStatus,
+  SocialAccountStatus,
+  SocialPlatform,
+  UsageMetric,
+} from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { auditService, AUDIT } from './audit.service';
 import { publishQueueService } from './publishQueue.service';
 import { billingService } from './billing.service';
 import { ApiError } from '../utils/apiError';
-import type { CreatePostInput, UpdatePostInput } from '../validators/post.validator';
+import { validateTikTokMedia } from '../config/postPublishRules';
+import { readTikTokSettings } from '../utils/platformSettings';
+import type { CreatePostInput, UpdatePostInput, TikTokSettings } from '../validators/post.validator';
 
 interface ClientContext {
   ipAddress?: string;
@@ -42,6 +51,7 @@ function toPostDto(post: Prisma.PostGetPayload<{ include: typeof postInclude }>)
     status: post.status,
     scheduledAt: post.scheduledAt,
     publishedAt: post.publishedAt,
+    tiktokSettings: readTikTokSettings(post.platformSettings),
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     author: post.author,
@@ -63,6 +73,28 @@ function toPostDto(post: Prisma.PostGetPayload<{ include: typeof postInclude }>)
       connectedAccount: t.connectedAccount,
     })),
   };
+}
+
+/** Cancels a post's not-yet-started publish jobs so it can be rescheduled or published now. */
+async function cancelPendingPublishJobs(postId: string) {
+  await prisma.publishJob.updateMany({
+    where: { postId, status: { in: [PublishJobStatus.QUEUED, PublishJobStatus.DELAYED] } },
+    data: { status: PublishJobStatus.CANCELLED, completedAt: new Date() },
+  });
+}
+
+/** Rejects early what TikTok would reject at publish time. Drafts are not checked. */
+function assertTikTokReady(
+  hasTikTok: boolean,
+  settings: TikTokSettings | null | undefined,
+  media: Array<{ mimeType: string }>,
+) {
+  if (!hasTikTok) return;
+  if (!settings) {
+    throw ApiError.badRequest('Choose TikTok settings (who can view, comments) before posting.');
+  }
+  const mediaError = validateTikTokMedia(media);
+  if (mediaError) throw ApiError.badRequest(mediaError);
 }
 
 async function validateConnectedAccounts(workspaceId: string, accountIds: string[]) {
@@ -137,7 +169,14 @@ export const postService = {
     input: CreatePostInput,
     ctx: ClientContext,
   ) {
-    await validateConnectedAccounts(workspaceId, input.connectedAccountIds);
+    const accounts = await validateConnectedAccounts(workspaceId, input.connectedAccountIds);
+    if (!input.saveAsDraft) {
+      assertTikTokReady(
+        accounts.some((a) => a.platform === SocialPlatform.TIKTOK),
+        input.tiktokSettings,
+        input.media ?? [],
+      );
+    }
 
     const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
     if (scheduledAt && scheduledAt <= new Date() && !input.saveAsDraft) {
@@ -155,6 +194,7 @@ export const postService = {
         content: input.content,
         status,
         scheduledAt: status === PostStatus.SCHEDULED ? scheduledAt : null,
+        ...(input.tiktokSettings && { platformSettings: { tiktok: input.tiktokSettings } }),
         media: {
           create: (input.media ?? []).map((m, i) => ({
             url: m.url,
@@ -201,6 +241,10 @@ export const postService = {
   ) {
     const existing = await prisma.post.findFirst({
       where: { id: postId, workspaceId },
+      include: {
+        media: { select: { mimeType: true } },
+        targets: { select: { connectedAccount: { select: { platform: true } } } },
+      },
     });
     if (!existing) throw ApiError.notFound('Post not found.');
 
@@ -212,9 +256,12 @@ export const postService = {
       throw ApiError.badRequest('Only draft, scheduled, or failed posts can be edited.');
     }
 
+    let platforms = existing.targets.map((t) => t.connectedAccount.platform);
     if (input.connectedAccountIds) {
-      await validateConnectedAccounts(workspaceId, input.connectedAccountIds);
+      const accounts = await validateConnectedAccounts(workspaceId, input.connectedAccountIds);
+      platforms = accounts.map((a) => a.platform);
     }
+
 
     let scheduledAt: Date | null | undefined = undefined;
     if (input.scheduledAt !== undefined) {
@@ -236,6 +283,17 @@ export const postService = {
       } else if (input.saveAsDraft === false && !nextScheduled) {
         status = PostStatus.DRAFT;
       }
+    }
+
+    // Drafts may be incomplete; anything heading for a platform must satisfy TikTok's rules.
+    if ((status ?? existing.status) !== PostStatus.DRAFT) {
+      assertTikTokReady(
+        platforms.includes(SocialPlatform.TIKTOK),
+        input.tiktokSettings !== undefined
+          ? input.tiktokSettings
+          : readTikTokSettings(existing.platformSettings),
+        input.media ?? existing.media,
+      );
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -269,6 +327,11 @@ export const postService = {
         where: { id: postId },
         data: {
           ...(input.content !== undefined && { content: input.content }),
+          ...(input.tiktokSettings !== undefined && {
+            platformSettings: input.tiktokSettings
+              ? { tiktok: input.tiktokSettings }
+              : Prisma.DbNull,
+          }),
           ...(status !== undefined && { status }),
           ...(scheduledAt !== undefined && {
             scheduledAt: status === PostStatus.SCHEDULED ? scheduledAt : null,
@@ -285,6 +348,10 @@ export const postService = {
       userAgent: ctx.userAgent,
       metadata: { workspaceId, postId, status: updated.status },
     });
+
+    if (existing.status === PostStatus.SCHEDULED || updated.status === PostStatus.SCHEDULED) {
+      await cancelPendingPublishJobs(updated.id);
+    }
 
     if (updated.status === PostStatus.SCHEDULED && updated.scheduledAt) {
       await publishQueueService.enqueuePublish(updated.id, workspaceId, {
@@ -342,6 +409,7 @@ export const postService = {
 
     // Clear schedule when publishing immediately.
     if (existing.status === PostStatus.SCHEDULED) {
+      await cancelPendingPublishJobs(postId);
       await prisma.post.update({
         where: { id: postId },
         data: { scheduledAt: null, status: PostStatus.DRAFT },

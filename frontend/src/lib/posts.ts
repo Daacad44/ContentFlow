@@ -34,6 +34,21 @@ export interface PostTarget {
   };
 }
 
+export type TikTokPrivacyLevel =
+  | 'PUBLIC_TO_EVERYONE'
+  | 'MUTUAL_FOLLOW_FRIENDS'
+  | 'FOLLOWER_OF_CREATOR'
+  | 'SELF_ONLY';
+
+export interface TikTokSettings {
+  privacyLevel: TikTokPrivacyLevel;
+  allowComment: boolean;
+  allowDuet: boolean;
+  allowStitch: boolean;
+  commercialContent: 'none' | 'brand_organic' | 'brand_content';
+  consentGiven: true;
+}
+
 export interface Post {
   id: string;
   workspaceId: string;
@@ -41,6 +56,7 @@ export interface Post {
   status: PostStatus;
   scheduledAt: string | null;
   publishedAt: string | null;
+  tiktokSettings: TikTokSettings | null;
   createdAt: string;
   updatedAt: string;
   author: { id: string; fullName: string; email: string };
@@ -100,6 +116,7 @@ export const postsApi = {
       scheduledAt?: string;
       saveAsDraft?: boolean;
       media?: PostMediaInput[];
+      tiktokSettings?: TikTokSettings;
     },
   ) {
     return api.post<{ data: { post: Post } }>(`/workspaces/${workspaceId}/posts`, body);
@@ -114,6 +131,7 @@ export const postsApi = {
       scheduledAt?: string | null;
       saveAsDraft?: boolean;
       media?: PostMediaInput[];
+      tiktokSettings?: TikTokSettings | null;
     },
   ) {
     return api.patch<{ data: { post: Post } }>(

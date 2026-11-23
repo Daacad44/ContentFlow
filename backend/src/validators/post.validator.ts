@@ -17,6 +17,34 @@ const postMediaItemSchema = z.object({
   size: z.number().int().positive().max(50 * 1024 * 1024),
 });
 
+export const TIKTOK_PRIVACY_LEVELS = [
+  'PUBLIC_TO_EVERYONE',
+  'MUTUAL_FOLLOW_FRIENDS',
+  'FOLLOWER_OF_CREATOR',
+  'SELF_ONLY',
+] as const;
+
+/** TikTok requires the creator to choose these on every post (Content Sharing Guidelines). */
+export const tiktokSettingsSchema = z
+  .object({
+    privacyLevel: z.enum(TIKTOK_PRIVACY_LEVELS, {
+      errorMap: () => ({ message: 'Choose who can view this TikTok post.' }),
+    }),
+    allowComment: z.boolean().default(false),
+    allowDuet: z.boolean().default(false),
+    allowStitch: z.boolean().default(false),
+    commercialContent: z.enum(['none', 'brand_organic', 'brand_content']).default('none'),
+    consentGiven: z.literal(true, {
+      errorMap: () => ({ message: "You must agree to TikTok's Music Usage Confirmation." }),
+    }),
+  })
+  .refine((s) => !(s.commercialContent === 'brand_content' && s.privacyLevel === 'SELF_ONLY'), {
+    message: 'Branded content cannot be private (Only me).',
+    path: ['privacyLevel'],
+  });
+
+export type TikTokSettings = z.infer<typeof tiktokSettingsSchema>;
+
 export const directUploadSchema = z.object({
   filename: z.string().trim().min(1).max(255),
   mimeType: z.string().min(1).max(100),
@@ -32,6 +60,7 @@ export const createPostSchema = z
     scheduledAt: z.string().datetime({ message: 'Invalid schedule date.' }).optional(),
     saveAsDraft: z.boolean().optional().default(false),
     media: z.array(postMediaItemSchema).max(10).optional().default([]),
+    tiktokSettings: tiktokSettingsSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (data.saveAsDraft && data.scheduledAt) {
@@ -50,6 +79,7 @@ export const updatePostSchema = z
     scheduledAt: z.string().datetime().nullable().optional(),
     saveAsDraft: z.boolean().optional(),
     media: z.array(postMediaItemSchema).max(10).optional(),
+    tiktokSettings: tiktokSettingsSchema.nullable().optional(),
   })
   .refine(
     (data) =>
@@ -57,7 +87,8 @@ export const updatePostSchema = z
       data.connectedAccountIds !== undefined ||
       data.scheduledAt !== undefined ||
       data.saveAsDraft !== undefined ||
-      data.media !== undefined,
+      data.media !== undefined ||
+      data.tiktokSettings !== undefined,
     { message: 'At least one field must be provided.' },
   );
 

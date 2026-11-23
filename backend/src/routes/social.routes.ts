@@ -85,4 +85,12 @@ workspaceRouter.get(
   asyncHandler(socialAccountController.checkHealth),
 );
 
+workspaceRouter.get(
+  '/:accountId/tiktok/creator-info',
+  validate({ params: socialAccountIdParamSchema }),
+  requireWorkspaceMember(),
+  requireWorkspacePermission(WORKSPACE_PERMISSIONS.POST_CREATE),
+  asyncHandler(socialAccountController.tiktokCreatorInfo),
+);
+
 export { workspaceRouter as socialWorkspaceRoutes, publicRouter as socialPublicRoutes };

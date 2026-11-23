@@ -498,4 +498,23 @@ export const socialAccountService = {
       return { healthy: false, message: 'Unable to verify account health.' };
     }
   },
+
+  /** TikTok creator info (allowed privacy levels, interaction settings) for the composer. */
+  async getTikTokCreatorInfo(workspaceId: string, accountId: string, mediaType: 'video' | 'photo') {
+    socialProfileService.assertZernioEnabled();
+
+    const account = await prisma.connectedAccount.findFirst({
+      where: { id: accountId, workspaceId },
+    });
+    if (!account) throw ApiError.notFound('Connected account not found.');
+    if (account.platform !== SocialPlatform.TIKTOK) {
+      throw ApiError.badRequest('This account is not a TikTok account.');
+    }
+
+    try {
+      return await zernioClient.getTikTokCreatorInfo(account.zernioAccountId, mediaType);
+    } catch {
+      throw ApiError.serviceUnavailable('Could not load TikTok account settings. Try again.');
+    }
+  },
 };

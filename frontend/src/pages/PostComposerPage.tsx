@@ -9,9 +9,16 @@ import { AppShell } from '../components/AppShell';
 import { MediaUpload } from '../components/MediaUpload';
 import { PlatformSelector } from '../components/PlatformSelector';
 import { AIPanel } from '../components/AIPanel';
+import {
+  TikTokSettingsPanel,
+  TikTokDraft,
+  EMPTY_TIKTOK_DRAFT,
+  draftFromSettings,
+  settingsFromDraft,
+} from '../components/TikTokSettingsPanel';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getApiErrorMessage } from '../lib/api';
-import { postsApi, PostMediaInput } from '../lib/posts';
+import { postsApi, PostMediaInput, TikTokSettings } from '../lib/posts';
 import { socialApi, ConnectedAccount } from '../lib/social';
 
 export default function PostComposerPage() {
@@ -28,6 +35,33 @@ export default function PostComposerPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
+  const [tiktok, setTiktok] = useState<TikTokDraft>(EMPTY_TIKTOK_DRAFT);
+
+  const tiktokAccount = accounts.find(
+    (a) => a.platform === 'TIKTOK' && selectedAccountIds.includes(a.id),
+  );
+  const tiktokMediaKind: 'video' | 'photo' =
+    media.length > 0 && media.every((m) => m.mimeType.startsWith('image/')) ? 'photo' : 'video';
+
+  /**
+   * Validates TikTok requirements when a TikTok account is selected. Returns the settings to
+   * send (undefined when TikTok is not selected), or null after showing an error.
+   */
+  const resolveTikTok = (forPublish: boolean): TikTokSettings | undefined | null => {
+    if (!tiktokAccount) return undefined;
+    const result = settingsFromDraft(tiktok);
+    if (!forPublish) return 'settings' in result ? result.settings : undefined;
+    if ('error' in result) {
+      toast.error(result.error);
+      return null;
+    }
+    const mediaError = tiktokMediaError(media);
+    if (mediaError) {
+      toast.error(mediaError);
+      return null;
+    }
+    return result.settings;
+  };
 
   const canCreate = permissions.includes('post:create');
   const canEdit = permissions.includes('post:update');
@@ -62,6 +96,7 @@ export default function PostComposerPage() {
         }
 
         setContent(post.content);
+        setTiktok(draftFromSettings(post.tiktokSettings));
         setSelectedAccountIds(post.targets.map((t) => t.connectedAccount.id));
         setMedia(
           post.media.map((m) => ({
@@ -100,6 +135,8 @@ export default function PostComposerPage() {
       toast.error('Pick a schedule date and time.');
       return;
     }
+    const tiktokSettings = resolveTikTok(!saveAsDraft && scheduleEnabled);
+    if (tiktokSettings === null) return;
 
     setSubmitting(true);
     try {
@@ -108,6 +145,7 @@ export default function PostComposerPage() {
         connectedAccountIds: selectedAccountIds,
         media,
         saveAsDraft,
+        ...(tiktokSettings ? { tiktokSettings } : {}),
         ...(scheduleEnabled && scheduledAt && !saveAsDraft
           ? { scheduledAt: new Date(scheduledAt).toISOString() }
           : {}),
@@ -141,6 +179,8 @@ export default function PostComposerPage() {
       toast.error('Select at least one platform.');
       return;
     }
+    const tiktokSettings = resolveTikTok(true);
+    if (tiktokSettings === null) return;
 
     setSubmitting(true);
     try {
@@ -149,9 +189,10 @@ export default function PostComposerPage() {
         connectedAccountIds: selectedAccountIds,
         media,
         saveAsDraft: true,
+        ...(tiktokSettings ? { tiktokSettings } : {}),
       });
-      await postsApi.publishNow(activeWorkspace.id, data.data.post.id);
-      toast.success('Post published to your platforms');
+      const published = await postsApi.publishNow(activeWorkspace.id, data.data.post.id);
+      toastPublishResult(published.data.data.post.status);
       navigate('/posts');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Failed to publish post.'));
@@ -162,10 +203,16 @@ export default function PostComposerPage() {
 
   const handlePublishNow = async () => {
     if (!activeWorkspace || !postId) return;
+    const tiktokSettings = resolveTikTok(true);
+    if (tiktokSettings === null) return;
     setSubmitting(true);
     try {
-      await postsApi.publishNow(activeWorkspace.id, postId);
-      toast.success('Post published');
+      if (tiktokSettings) {
+        // Store the TikTok choices made on this screen before publishing.
+        await postsApi.update(activeWorkspace.id, postId, { tiktokSettings });
+      }
+      const published = await postsApi.publishNow(activeWorkspace.id, postId);
+      toastPublishResult(published.data.data.post.status);
       navigate('/posts');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Failed to publish.'));
@@ -258,6 +305,17 @@ export default function PostComposerPage() {
             />
           </div>
 
+          {tiktokAccount && (
+            <TikTokSettingsPanel
+              workspaceId={activeWorkspace.id}
+              account={tiktokAccount}
+              mediaKind={tiktokMediaKind}
+              value={tiktok}
+              onChange={setTiktok}
+              disabled={submitting}
+            />
+          )}
+
           <div className="rounded-xl border border-ink-500/60 bg-ink-800/30 p-4">
             <label className="flex cursor-pointer items-center gap-3">
               <input
@@ -342,6 +400,25 @@ export default function PostComposerPage() {
       </div>
     </AppShell>
   );
+}
+
+function toastPublishResult(status: string) {
+  if (status === 'PUBLISHING') {
+    toast.success('Post sent. The platform is still processing it; status updates within a few minutes.');
+  } else {
+    toast.success('Post published to your platforms');
+  }
+}
+
+/** Mirrors the API's TikTok media rules so the user sees the problem before publishing. */
+function tiktokMediaError(media: PostMediaInput[]): string | null {
+  if (media.length === 0) return 'TikTok posts need a video or photos.';
+  const videos = media.filter((m) => m.mimeType.startsWith('video/')).length;
+  const images = media.filter((m) => m.mimeType.startsWith('image/'));
+  if (videos > 0 && images.length > 0) return "TikTok can't mix photos and a video in one post.";
+  if (videos > 1) return 'TikTok allows one video per post.';
+  if (images.some((m) => m.mimeType === 'image/gif')) return "TikTok doesn't accept GIFs. Use JPG, PNG or WebP.";
+  return null;
 }
 
 function toDatetimeLocal(iso: string): string {
