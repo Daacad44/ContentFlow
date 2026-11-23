@@ -2,8 +2,9 @@
  * src/services/mediaUpload.service.ts
  * Storage for post attachments.
  *
+ * - "supabase": Supabase Storage public bucket (SUPABASE_STORAGE_BUCKET). Use in production.
  * - "cloudinary": durable object storage with a public HTTPS URL that social platforms
- *   (via Zernio) can fetch. Use this in production.
+ *   (via Zernio) can fetch.
  * - "local": files on the API server's disk under UPLOAD_DIR. Fine for development, but
  *   files are lost when a container is replaced unless a persistent volume is mounted.
  */
@@ -12,6 +13,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { env } from '../config/env';
 import { cloudinaryClient } from '../lib/cloudinary.client';
+import { supabaseStorageClient } from '../lib/supabaseStorage.client';
 import { ApiError } from '../utils/apiError';
 import { logger } from '../utils/logger';
 
@@ -68,6 +70,17 @@ export const mediaUploadService = {
       size: file.size,
     };
 
+    if (env.mediaStorage === 'supabase') {
+      try {
+        const objectPath = `${workspaceId}/${randomUUID()}${ALLOWED_MIME_TYPES[file.mimetype]}`;
+        const uploaded = await supabaseStorageClient.upload(objectPath, file.buffer, file.mimetype);
+        return { url: uploaded.url, ...meta };
+      } catch (err) {
+        logger.error({ err, workspaceId }, 'Supabase media upload failed');
+        throw ApiError.serviceUnavailable('Media storage is unavailable. Please try again.');
+      }
+    }
+
     if (env.mediaStorage === 'cloudinary') {
       try {
         const uploaded = await cloudinaryClient.uploadMedia(file.buffer, {
@@ -80,6 +93,13 @@ export const mediaUploadService = {
         logger.error({ err, workspaceId }, 'Cloudinary media upload failed');
         throw ApiError.serviceUnavailable('Media storage is unavailable. Please try again.');
       }
+    }
+
+    if (env.isServerless) {
+      // Serverless functions have no durable disk: a local file would vanish after the request.
+      throw ApiError.serviceUnavailable(
+        'Media storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+      );
     }
 
     const dir = ensureUploadDir(workspaceId);

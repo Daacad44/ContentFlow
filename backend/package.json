@@ -21,7 +21,8 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --runInBand",
-    "test:otp": "tsx scripts/test-otp-flow.ts"
+    "test:otp": "tsx scripts/test-otp-flow.ts",
+    "vercel-build": "prisma generate && prisma migrate deploy"
   },
   "keywords": [
     "authentication",
