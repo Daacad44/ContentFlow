@@ -95,6 +95,12 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().optional().default(''),
   STRIPE_PUBLISHABLE_KEY: z.string().optional().default(''),
+  // Stripe Price IDs for paid plans (price_...). Without them, plans cannot be purchased.
+  STRIPE_PRICE_PRO: z.string().optional().default(''),
+  STRIPE_PRICE_BUSINESS: z.string().optional().default(''),
+  // Block actions that exceed the workspace's plan (posts, AI, creative assets, team size).
+  // Usage is always tracked; turn this on once paid plans can be purchased.
+  ENFORCE_PLAN_LIMITS: booleanString.default('false'),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -2,11 +2,12 @@
  * src/services/creative.service.ts
  * AI Creative Studio — image generation, posters, banners, ads, brand assets.
  */
-import { CreativeAssetType, Prisma } from '@prisma/client';
+import { CreativeAssetType, Prisma, UsageMetric } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { geminiClient } from '../lib/gemini.client';
 import { cloudinaryClient } from '../lib/cloudinary.client';
 import { auditService, AUDIT } from './audit.service';
+import { billingService } from './billing.service';
 import { ApiError } from '../utils/apiError';
 import { env } from '../config/env';
 
@@ -100,6 +101,8 @@ export const creativeService = {
     input: GenerateCreativeInput,
     ctx?: CreativeContext,
   ) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.CREATIVE_ASSETS);
+
     const brand = await getBrandKit(workspaceId);
     const typePrompt = TYPE_PROMPTS[type];
 
@@ -154,6 +157,8 @@ export const creativeService = {
       metadata: { generatedWith: env.geminiEnabled ? 'gemini' : 'placeholder' },
       userId: ctx?.userId,
     });
+
+    await billingService.trackUsage(workspaceId, UsageMetric.CREATIVE_ASSETS);
 
     return asset;
   },

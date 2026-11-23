@@ -2,10 +2,11 @@
  * src/services/aiContent.service.ts
  * AI content generation using Gemini 2.5 — captions, posts, CTAs, hashtags, calendars.
  */
-import { ContentTemplateType, Prisma } from '@prisma/client';
+import { ContentTemplateType, Prisma, UsageMetric } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { geminiClient } from '../lib/gemini.client';
 import { auditService, AUDIT } from './audit.service';
+import { billingService } from './billing.service';
 import { ApiError } from '../utils/apiError';
 import { env } from '../config/env';
 
@@ -37,7 +38,7 @@ async function recordGeneration(
   output: string,
   userId?: string,
 ) {
-  return prisma.generatedContent.create({
+  const record = await prisma.generatedContent.create({
     data: {
       workspaceId,
       userId,
@@ -48,10 +49,13 @@ async function recordGeneration(
       model: env.GEMINI_MODEL,
     },
   });
+  await billingService.trackUsage(workspaceId, UsageMetric.AI_GENERATIONS);
+  return record;
 }
 
 export const aiContentService = {
   async generateCaption(workspaceId: string, input: GenerateInput, ctx?: GenerateContext) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.AI_GENERATIONS);
     const prompt = buildPrompt('caption', input, [
       'Write a compelling social media caption (max 2200 chars).',
       'Include emojis where appropriate.',
@@ -73,6 +77,7 @@ export const aiContentService = {
   },
 
   async generatePost(workspaceId: string, input: GenerateInput, ctx?: GenerateContext) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.AI_GENERATIONS);
     const prompt = buildPrompt('full post', input, [
       'Write a complete social media post ready to publish.',
       'Include a hook, body, and call-to-action.',
@@ -92,6 +97,7 @@ export const aiContentService = {
   },
 
   async generateCta(workspaceId: string, input: GenerateInput, ctx?: GenerateContext) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.AI_GENERATIONS);
     const prompt = buildPrompt('call-to-action', input, [
       'Generate 5 distinct call-to-action phrases.',
       'Number each CTA (1-5).',
@@ -105,6 +111,7 @@ export const aiContentService = {
   },
 
   async generateHashtags(workspaceId: string, input: GenerateInput, ctx?: GenerateContext) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.AI_GENERATIONS);
     const prompt = buildPrompt('hashtags', input, [
       'Generate 15-20 relevant hashtags.',
       'Mix popular and niche tags.',
@@ -123,6 +130,8 @@ export const aiContentService = {
     input: GenerateInput & { days?: number; postsPerDay?: number },
     ctx?: GenerateContext,
   ) {
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.AI_GENERATIONS);
+
     const days = input.days ?? 7;
     const postsPerDay = input.postsPerDay ?? 1;
 

@@ -17,6 +17,64 @@ import { ApiError } from '../utils/apiError';
 import { stripeService } from './stripe.service';
 import { auditService, AUDIT } from './audit.service';
 import { notificationService } from './notification.service';
+import { logger } from '../utils/logger';
+
+/** Plan `features` key that holds the limit for each usage metric. */
+export const USAGE_LIMIT_KEYS: Record<UsageMetric, string> = {
+  [UsageMetric.POSTS]: 'posts',
+  [UsageMetric.AI_GENERATIONS]: 'aiGenerations',
+  [UsageMetric.CREATIVE_ASSETS]: 'creativeAssets',
+  [UsageMetric.TEAM_MEMBERS]: 'teamMembers',
+  [UsageMetric.PUBLISH_JOBS]: 'posts',
+};
+
+const USAGE_LABELS: Record<UsageMetric, string> = {
+  [UsageMetric.POSTS]: 'posts',
+  [UsageMetric.AI_GENERATIONS]: 'AI generations',
+  [UsageMetric.CREATIVE_ASSETS]: 'creative assets',
+  [UsageMetric.TEAM_MEMBERS]: 'team members',
+  [UsageMetric.PUBLISH_JOBS]: 'publish jobs',
+};
+
+/** Subscriptions in these states keep their plan's limits; anything else falls back to Free. */
+const ENTITLED_STATUSES: SubscriptionStatus[] = [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING];
+
+/**
+ * Reads a numeric limit from plan features. A negative value means unlimited;
+ * a missing or invalid value is treated as unlimited so a misconfigured plan never locks users out.
+ */
+export function readLimit(features: unknown, metric: UsageMetric): number | null {
+  const value = (features as Record<string, unknown> | null)?.[USAGE_LIMIT_KEYS[metric]];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+/** True when adding `increment` to `used` would go past `limit` (null = unlimited). */
+export function exceedsLimit(limit: number | null, used: number, increment = 1): boolean {
+  return limit !== null && used + increment > limit;
+}
+
+/** Usage thresholds (fraction of the limit) at which workspace owners are notified. */
+const WARNING_THRESHOLDS = [0.9, 1];
+
+/** Returns the highest threshold crossed when usage moved from `previous` to `current`, if any. */
+export function crossedThreshold(limit: number | null, previous: number, current: number): number | null {
+  if (limit === null || limit === 0) return null;
+  let crossed: number | null = null;
+  for (const t of WARNING_THRESHOLDS) {
+    const mark = Math.ceil(limit * t);
+    if (previous < mark && current >= mark) crossed = t;
+  }
+  return crossed;
+}
+
+function currentPeriod() {
+  const now = new Date();
+  return {
+    periodStart: new Date(now.getFullYear(), now.getMonth(), 1),
+    periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+  };
+}
 
 const DEFAULT_PLANS = [
   {
@@ -50,11 +108,16 @@ const DEFAULT_PLANS = [
 
 export const billingService = {
   async ensureDefaultPlans() {
+    const priceIds: Record<string, string> = {
+      pro: env.STRIPE_PRICE_PRO,
+      business: env.STRIPE_PRICE_BUSINESS,
+    };
     for (const plan of DEFAULT_PLANS) {
+      const stripePriceId = priceIds[plan.slug] || undefined;
       await prisma.plan.upsert({
         where: { slug: plan.slug },
-        create: plan,
-        update: {},
+        create: { ...plan, stripePriceId },
+        update: stripePriceId ? { stripePriceId } : {},
       });
     }
   },
@@ -190,68 +253,124 @@ export const billingService = {
     return { items, total, page, limit: take };
   },
 
-  async trackUsage(workspaceId: string, metric: UsageMetric, quantity = 1) {
-    const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  /** Plan features that apply right now: the plan's own, or Free if the subscription lapsed. */
+  async getEffectiveFeatures(workspaceId: string) {
+    const sub = await this.getSubscription(workspaceId);
+    if (ENTITLED_STATUSES.includes(sub.status)) return sub.plan.features;
+    const freePlan = await prisma.plan.findUnique({ where: { slug: 'free' } });
+    return freePlan?.features ?? sub.plan.features;
+  },
 
-    const record = await prisma.usageRecord.upsert({
-      where: {
-        workspaceId_metric_periodStart: { workspaceId, metric, periodStart },
-      },
-      create: { workspaceId, metric, quantity, periodStart, periodEnd },
-      update: { quantity: { increment: quantity } },
+  /** Current usage of a metric. Team members are counted live; the rest per calendar month. */
+  async getCurrentUsage(workspaceId: string, metric: UsageMetric): Promise<number> {
+    if (metric === UsageMetric.TEAM_MEMBERS) {
+      const [members, pendingInvites] = await Promise.all([
+        prisma.workspaceMember.count({ where: { workspaceId } }),
+        prisma.workspaceInvitation.count({
+          where: { workspaceId, status: 'PENDING', expiresAt: { gt: new Date() } },
+        }),
+      ]);
+      return members + pendingInvites;
+    }
+    const { periodStart } = currentPeriod();
+    const record = await prisma.usageRecord.findUnique({
+      where: { workspaceId_metric_periodStart: { workspaceId, metric, periodStart } },
     });
+    return record?.quantity ?? 0;
+  },
 
-    await this.checkUsageLimits(workspaceId, metric, record.quantity);
-    return record;
+  /**
+   * Throws 402 PLAN_LIMIT_REACHED when the action would exceed the workspace's plan.
+   * Call before doing the work; call `trackUsage` after it succeeds.
+   * No-op unless ENFORCE_PLAN_LIMITS=true.
+   */
+  async assertWithinLimit(workspaceId: string, metric: UsageMetric, increment = 1) {
+    if (!env.ENFORCE_PLAN_LIMITS) return;
+
+    const features = await this.getEffectiveFeatures(workspaceId);
+    const limit = readLimit(features, metric);
+    if (limit === null) return;
+
+    const used = await this.getCurrentUsage(workspaceId, metric);
+    if (exceedsLimit(limit, used, increment)) {
+      const period = metric === UsageMetric.TEAM_MEMBERS ? '' : ' this month';
+      throw new ApiError(
+        402,
+        `Your plan allows ${limit} ${USAGE_LABELS[metric]}${period}. Upgrade your plan to continue.`,
+        'PLAN_LIMIT_REACHED',
+        { metric, limit, used },
+      );
+    }
+  },
+
+  /**
+   * Records usage for the current month and notifies owners when 90% / 100% is first reached.
+   * Never throws: a tracking failure must not undo an action the user already completed.
+   */
+  async trackUsage(workspaceId: string, metric: UsageMetric, quantity = 1) {
+    try {
+      const { periodStart, periodEnd } = currentPeriod();
+      const record = await prisma.usageRecord.upsert({
+        where: {
+          workspaceId_metric_periodStart: { workspaceId, metric, periodStart },
+        },
+        create: { workspaceId, metric, quantity, periodStart, periodEnd },
+        update: { quantity: { increment: quantity } },
+      });
+
+      await this.checkUsageLimits(workspaceId, metric, record.quantity, record.quantity - quantity);
+      return record;
+    } catch (err) {
+      logger.error({ err, workspaceId, metric }, 'Failed to track usage');
+      return null;
+    }
   },
 
   async getUsage(workspaceId: string) {
-    const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const { periodStart } = currentPeriod();
 
     const records = await prisma.usageRecord.findMany({
       where: { workspaceId, periodStart },
     });
 
     const sub = await this.getSubscription(workspaceId);
-    const features = sub.plan.features as Record<string, number>;
+    const features = await this.getEffectiveFeatures(workspaceId);
 
     return {
       periodStart,
       plan: sub.plan,
       usage: records,
-      limits: features,
+      limits: features as Record<string, number>,
     };
   },
 
-  async checkUsageLimits(workspaceId: string, metric: UsageMetric, currentQuantity: number) {
-    const sub = await this.getSubscription(workspaceId);
-    const features = sub.plan.features as Record<string, number>;
-    const limitKey = {
-      [UsageMetric.POSTS]: 'posts',
-      [UsageMetric.AI_GENERATIONS]: 'aiGenerations',
-      [UsageMetric.CREATIVE_ASSETS]: 'creativeAssets',
-      [UsageMetric.TEAM_MEMBERS]: 'teamMembers',
-      [UsageMetric.PUBLISH_JOBS]: 'posts',
-    }[metric];
+  async checkUsageLimits(
+    workspaceId: string,
+    metric: UsageMetric,
+    currentQuantity: number,
+    previousQuantity = currentQuantity - 1,
+  ) {
+    const features = await this.getEffectiveFeatures(workspaceId);
+    const limit = readLimit(features, metric);
+    const threshold = crossedThreshold(limit, previousQuantity, currentQuantity);
+    if (threshold === null || limit === null) return;
 
-    const limit = features[limitKey];
-    if (limit > 0 && currentQuantity >= limit * 0.9) {
-      const owners = await prisma.workspaceMember.findMany({
-        where: { workspaceId, role: 'OWNER' },
+    const owners = await prisma.workspaceMember.findMany({
+      where: { workspaceId, role: 'OWNER' },
+    });
+    const label = USAGE_LABELS[metric];
+    for (const owner of owners) {
+      await notificationService.create({
+        userId: owner.userId,
+        workspaceId,
+        category: NotificationCategory.BILLING,
+        title: threshold >= 1 ? 'Plan limit reached' : 'Usage limit warning',
+        body:
+          threshold >= 1
+            ? `You've used all ${limit} ${label} included in your plan this month. Upgrade to keep going.`
+            : `You've used ${currentQuantity} of ${limit} ${label} this month.`,
+        sendEmail: true,
       });
-      for (const owner of owners) {
-        await notificationService.create({
-          userId: owner.userId,
-          workspaceId,
-          category: NotificationCategory.BILLING,
-          title: 'Usage limit warning',
-          body: `You've used ${currentQuantity} of ${limit} ${limitKey} this month.`,
-          sendEmail: true,
-        });
-      }
     }
   },
 

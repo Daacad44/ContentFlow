@@ -2,10 +2,11 @@
  * src/services/post.service.ts
  * Create, read, update, delete, and schedule workspace posts.
  */
-import { PostStatus, Prisma, SocialAccountStatus } from '@prisma/client';
+import { PostStatus, Prisma, SocialAccountStatus, UsageMetric } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { auditService, AUDIT } from './audit.service';
 import { publishQueueService } from './publishQueue.service';
+import { billingService } from './billing.service';
 import { ApiError } from '../utils/apiError';
 import type { CreatePostInput, UpdatePostInput } from '../validators/post.validator';
 
@@ -143,6 +144,8 @@ export const postService = {
       throw ApiError.badRequest('Scheduled time must be in the future.');
     }
 
+    await billingService.assertWithinLimit(workspaceId, UsageMetric.POSTS);
+
     const status = resolveStatus(input.saveAsDraft, scheduledAt);
 
     const post = await prisma.post.create({
@@ -177,6 +180,8 @@ export const postService = {
       userAgent: ctx.userAgent,
       metadata: { workspaceId, postId: post.id, status: post.status },
     });
+
+    await billingService.trackUsage(workspaceId, UsageMetric.POSTS);
 
     if (post.status === PostStatus.SCHEDULED && post.scheduledAt) {
       await publishQueueService.enqueuePublish(post.id, workspaceId, {
