@@ -12,7 +12,7 @@ import {
   validatePlatformPublishRequirements,
   validateTikTokMedia,
 } from '../config/postPublishRules';
-import { readTikTokSettings } from '../utils/platformSettings';
+import { DEFAULT_TIKTOK_SETTINGS, readTikTokSettings } from '../utils/platformSettings';
 import type { ZernioTikTokSettings } from '../lib/zernio.client';
 import { ApiError } from '../utils/apiError';
 import { logger } from '../utils/logger';
@@ -107,11 +107,8 @@ export const postPublishService = {
       }
     }
 
-    const tiktokSettings = readTikTokSettings(post.platformSettings);
+    const tiktokSettings = readTikTokSettings(post.platformSettings) ?? DEFAULT_TIKTOK_SETTINGS;
     if (post.targets.some((t) => t.connectedAccount.platform === 'TIKTOK')) {
-      if (!tiktokSettings) {
-        throw ApiError.badRequest('Choose TikTok settings (who can view, comments) before posting.');
-      }
       const mediaError = validateTikTokMedia(post.media);
       if (mediaError) throw ApiError.badRequest(mediaError);
     }

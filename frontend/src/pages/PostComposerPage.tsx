@@ -51,6 +51,7 @@ export default function PostComposerPage() {
     if (!tiktokAccount) return undefined;
     const result = settingsFromDraft(tiktok);
     if (!forPublish) return 'settings' in result ? result.settings : undefined;
+    // Defaults are pre-filled, so this only fails if the user cleared a choice.
     if ('error' in result) {
       toast.error(result.error);
       return null;

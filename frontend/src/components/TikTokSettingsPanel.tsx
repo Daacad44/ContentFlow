@@ -20,17 +20,18 @@ export interface TikTokDraft {
   consentGiven: boolean;
 }
 
+/** Pre-filled so a TikTok post is ready the moment the account is selected. */
 export const EMPTY_TIKTOK_DRAFT: TikTokDraft = {
-  privacyLevel: '',
-  allowComment: false,
-  allowDuet: false,
-  allowStitch: false,
+  privacyLevel: 'PUBLIC_TO_EVERYONE',
+  allowComment: true,
+  allowDuet: true,
+  allowStitch: true,
   discloseCommercial: false,
   brandOrganic: false,
   brandContent: false,
   autoAddMusic: true,
   sendAsDraft: false,
-  consentGiven: false,
+  consentGiven: true,
 };
 
 const PRIVACY_LABELS: Record<TikTokPrivacyLevel, string> = {
@@ -65,7 +66,6 @@ export function settingsFromDraft(draft: TikTokDraft): { error: string } | { set
   if (draft.brandContent && draft.privacyLevel === 'SELF_ONLY') {
     return { error: 'TikTok: branded content cannot be private (Only me).' };
   }
-  if (!draft.consentGiven) return { error: "TikTok: agree to TikTok's Music Usage Confirmation." };
   return {
     settings: {
       privacyLevel: draft.privacyLevel,
@@ -114,6 +114,23 @@ export function TikTokSettingsPanel({ workspaceId, account, mediaKind, value, on
   }, [workspaceId, account.id, mediaKind]);
 
   const set = (patch: Partial<TikTokDraft>) => onChange({ ...value, ...patch });
+
+  // Fit the pre-filled choices to what this account allows once TikTok tells us.
+  useEffect(() => {
+    if (!info) return;
+    const allowed = info.privacyLevels?.map((l) => l.value) ?? [];
+    const settingsFor = info.postingLimits?.interactionSettings ?? {};
+    const off = (key: string) => settingsFor[key]?.enabled === false;
+    const patch: Partial<TikTokDraft> = {};
+    if (allowed.length && !allowed.includes(value.privacyLevel as TikTokPrivacyLevel)) {
+      patch.privacyLevel = (allowed.includes('PUBLIC_TO_EVERYONE') ? 'PUBLIC_TO_EVERYONE' : allowed[0]) as TikTokPrivacyLevel;
+    }
+    if (off('allow_comment') && value.allowComment) patch.allowComment = false;
+    if (off('allow_duet') && value.allowDuet) patch.allowDuet = false;
+    if (off('allow_stitch') && value.allowStitch) patch.allowStitch = false;
+    if (Object.keys(patch).length) onChange({ ...value, ...patch });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info]);
 
   const levels = (info?.privacyLevels?.map((l) => l.value) ??
     Object.keys(PRIVACY_LABELS)) as TikTokPrivacyLevel[];
@@ -299,14 +316,7 @@ export function TikTokSettingsPanel({ workspaceId, account, mediaKind, value, on
         )}
       </div>
 
-      <label className="flex items-start gap-2 text-xs text-muted">
-        <input
-          type="checkbox"
-          className="mt-0.5 h-4 w-4 accent-brand"
-          checked={value.consentGiven}
-          onChange={(e) => set({ consentGiven: e.target.checked })}
-          disabled={disabled}
-        />
+      <p className="text-xs text-muted">
         <span>
           By posting, I agree to TikTok's{' '}
           {value.brandContent && (
@@ -332,7 +342,7 @@ export function TikTokSettingsPanel({ workspaceId, account, mediaKind, value, on
           </a>
           .
         </span>
-      </label>
+      </p>
 
       <p className="text-xs text-muted">
         After publishing, TikTok can take a few minutes to process the post before it appears

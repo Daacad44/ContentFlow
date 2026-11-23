@@ -83,16 +83,16 @@ async function cancelPendingPublishJobs(postId: string) {
   });
 }
 
-/** Rejects early what TikTok would reject at publish time. Drafts are not checked. */
+/**
+ * Rejects early what TikTok would reject at publish time. Drafts are not checked. Missing
+ * settings are fine: publishing falls back to DEFAULT_TIKTOK_SETTINGS.
+ */
 function assertTikTokReady(
   hasTikTok: boolean,
-  settings: TikTokSettings | null | undefined,
+  _settings: TikTokSettings | null | undefined,
   media: Array<{ mimeType: string }>,
 ) {
   if (!hasTikTok) return;
-  if (!settings) {
-    throw ApiError.badRequest('Choose TikTok settings (who can view, comments) before posting.');
-  }
   const mediaError = validateTikTokMedia(media);
   if (mediaError) throw ApiError.badRequest(mediaError);
 }
