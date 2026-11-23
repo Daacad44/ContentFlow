@@ -10,7 +10,10 @@ import { toZernioPlatform } from '../config/socialPlatforms';
 import {
   isConfirmedPlatformPublish,
   validatePlatformPublishRequirements,
+  validateTikTokMedia,
 } from '../config/postPublishRules';
+import { readTikTokSettings } from '../utils/platformSettings';
+import type { ZernioTikTokSettings } from '../lib/zernio.client';
 import { ApiError } from '../utils/apiError';
 import { logger } from '../utils/logger';
 
@@ -31,6 +34,11 @@ const postInclude = {
   },
   author: { select: { id: true, fullName: true, email: true } },
 };
+
+/** How long a platform may stay "processing" before the target is marked failed. */
+const PENDING_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+/** How long to keep looking up a TikTok permalink after the post was accepted. */
+const URL_LOOKUP_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 function toMediaType(mimeType: string): 'image' | 'video' {
   return mimeType.startsWith('video/') ? 'video' : 'image';
@@ -99,17 +107,25 @@ export const postPublishService = {
       }
     }
 
+    const tiktokSettings = readTikTokSettings(post.platformSettings);
+    if (post.targets.some((t) => t.connectedAccount.platform === 'TIKTOK')) {
+      if (!tiktokSettings) {
+        throw ApiError.badRequest('Choose TikTok settings (who can view, comments) before posting.');
+      }
+      const mediaError = validateTikTokMedia(post.media);
+      if (mediaError) throw ApiError.badRequest(mediaError);
+    }
+
     await prisma.post.update({
       where: { id: postId },
       data: { status: PostStatus.PUBLISHING },
     });
 
-    let allSucceeded = true;
-    let anyPublished = false;
+    let anyFailed = false;
+    let anyPending = false;
 
     for (const target of post.targets) {
       if (target.status === PostTargetStatus.PUBLISHED) {
-        anyPublished = true;
         continue;
       }
 
@@ -119,6 +135,7 @@ export const postPublishService = {
       });
 
       try {
+        const isTikTok = target.connectedAccount.platform === 'TIKTOK';
         const result = await publishToAccount({
           platform: toZernioPlatform(target.connectedAccount.platform),
           zernioAccountId: target.connectedAccount.zernioAccountId,
@@ -128,7 +145,21 @@ export const postPublishService = {
             url: resolvePublicMediaUrl(m.url),
             title: m.filename,
           })),
+          tiktokSettings: isTikTok && tiktokSettings ? tiktokSettings : undefined,
         });
+
+        if (result.state === 'pending') {
+          anyPending = true;
+          await prisma.postTarget.update({
+            where: { id: target.id },
+            data: { status: PostTargetStatus.PUBLISHING, zernioPostId: result.zernioPostId },
+          });
+          logger.info(
+            { postId, targetId: target.id, zernioPostId: result.zernioPostId },
+            'Platform is still processing the post; cron will confirm it',
+          );
+          continue;
+        }
 
         await prisma.postTarget.update({
           where: { id: target.id },
@@ -136,11 +167,11 @@ export const postPublishService = {
             status: PostTargetStatus.PUBLISHED,
             externalPostId: result.externalPostId,
             platformPostUrl: result.platformPostUrl ?? null,
+            zernioPostId: result.zernioPostId,
             publishedAt: new Date(),
             errorMessage: null,
           },
         });
-        anyPublished = true;
 
         logger.info(
           {
@@ -152,7 +183,7 @@ export const postPublishService = {
           'Platform confirmed post delivery',
         );
       } catch (err) {
-        allSucceeded = false;
+        anyFailed = true;
         const message = err instanceof Error ? err.message : 'Publish failed.';
         logger.warn({ err, postId, targetId: target.id }, 'Failed to publish to target');
 
@@ -166,39 +197,174 @@ export const postPublishService = {
       }
     }
 
-    const finalStatus = allSucceeded ? PostStatus.PUBLISHED : PostStatus.FAILED;
-    const updated = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        status: finalStatus,
-        publishedAt: allSucceeded ? new Date() : anyPublished ? post.publishedAt : null,
-      },
-      include: postInclude,
-    });
+    const updated = await refreshPostStatus(postId);
 
-    if (!allSucceeded) {
+    if (anyFailed) {
       throw ApiError.badRequest(
         'Post failed to publish to one or more platforms. Check target errors for details.',
       );
     }
+    if (anyPending) {
+      logger.info({ postId }, 'Post accepted; waiting for platform confirmation');
+    }
 
     return updated;
   },
+
+  /**
+   * Confirms targets the platform was still processing (videos, TikTok) and fills in
+   * TikTok permalinks that appear minutes after publishing. Called by the cron runner.
+   */
+  async reconcilePendingTargets(limit = 25): Promise<{ checked: number; published: number; failed: number }> {
+    const summary = { checked: 0, published: 0, failed: 0 };
+    if (!env.zernioEnabled) return summary;
+
+    const now = Date.now();
+    const targets = await prisma.postTarget.findMany({
+      where: {
+        zernioPostId: { not: null },
+        OR: [
+          { status: PostTargetStatus.PUBLISHING },
+          {
+            status: PostTargetStatus.PUBLISHED,
+            platformPostUrl: null,
+            publishedAt: { gte: new Date(now - URL_LOOKUP_WINDOW_MS) },
+          },
+        ],
+      },
+      include: { connectedAccount: { select: { platform: true, zernioAccountId: true } } },
+      orderBy: { updatedAt: 'asc' },
+      take: limit,
+    });
+
+    const touchedPosts = new Set<string>();
+
+    for (const target of targets) {
+      summary.checked++;
+      const platform = toZernioPlatform(target.connectedAccount.platform);
+      try {
+        const zernioPost = await zernioClient.getPost(target.zernioPostId!);
+        const result = zernioClient.mapPostToCreateResult(
+          zernioPost,
+          target.connectedAccount.zernioAccountId,
+          platform,
+        );
+        const status = (result.platformStatus || result.status || '').toLowerCase();
+
+        if (target.status === PostTargetStatus.PUBLISHED) {
+          if (result.platformPostUrl) {
+            await prisma.postTarget.update({
+              where: { id: target.id },
+              data: {
+                platformPostUrl: result.platformPostUrl,
+                externalPostId: result.platformPostId?.trim() || target.externalPostId,
+              },
+            });
+          }
+          continue;
+        }
+
+        if (result.errorMessage || status === 'failed' || status === 'error' || status === 'rejected') {
+          await prisma.postTarget.update({
+            where: { id: target.id },
+            data: {
+              status: PostTargetStatus.FAILED,
+              errorMessage: result.errorMessage ?? `Platform rejected the post (status: ${status}).`,
+            },
+          });
+          summary.failed++;
+          touchedPosts.add(target.postId);
+        } else if (isConfirmedPlatformPublish(result)) {
+          await prisma.postTarget.update({
+            where: { id: target.id },
+            data: {
+              status: PostTargetStatus.PUBLISHED,
+              externalPostId: result.platformPostId?.trim() || target.zernioPostId,
+              platformPostUrl: result.platformPostUrl ?? null,
+              publishedAt: new Date(),
+              errorMessage: null,
+            },
+          });
+          summary.published++;
+          touchedPosts.add(target.postId);
+        } else if (now - target.updatedAt.getTime() > PENDING_TIMEOUT_MS) {
+          await prisma.postTarget.update({
+            where: { id: target.id },
+            data: {
+              status: PostTargetStatus.FAILED,
+              errorMessage: 'The platform did not confirm the post within 2 hours.',
+            },
+          });
+          summary.failed++;
+          touchedPosts.add(target.postId);
+        }
+      } catch (err) {
+        logger.warn({ err, targetId: target.id }, 'Could not reconcile pending post target');
+      }
+    }
+
+    for (const postId of touchedPosts) {
+      await refreshPostStatus(postId);
+    }
+
+    return summary;
+  },
 };
+
+/**
+ * Derives the post status from its targets: published when all are live, publishing while
+ * any platform is still processing, failed otherwise.
+ */
+async function refreshPostStatus(postId: string) {
+  const targets = await prisma.postTarget.findMany({
+    where: { postId },
+    select: { status: true },
+  });
+  const statuses = targets.map((t) => t.status);
+  const allPublished = statuses.every((s) => s === PostTargetStatus.PUBLISHED);
+  const anyPending = statuses.some(
+    (s) => s === PostTargetStatus.PUBLISHING || s === PostTargetStatus.PENDING,
+  );
+  const anyPublished = statuses.some((s) => s === PostTargetStatus.PUBLISHED);
+
+  const status = allPublished
+    ? PostStatus.PUBLISHED
+    : anyPending
+      ? PostStatus.PUBLISHING
+      : PostStatus.FAILED;
+
+  return prisma.post.update({
+    where: { id: postId },
+    data: {
+      status,
+      ...(anyPublished && { publishedAt: new Date() }),
+    },
+    include: postInclude,
+  });
+}
+
+type PublishOutcome =
+  | { state: 'published'; externalPostId: string; platformPostUrl?: string; zernioPostId?: string }
+  | { state: 'pending'; zernioPostId: string };
+
+/** Polls Zernio briefly; anything slower is left to reconcilePendingTargets. */
+const CONFIRM_ATTEMPTS = 8;
+const CONFIRM_INTERVAL_MS = 5_000;
 
 async function publishToAccount(params: {
   platform: string;
   zernioAccountId: string;
   content: string;
   media: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
-}): Promise<{ externalPostId: string; platformPostUrl?: string }> {
+  tiktokSettings?: ZernioTikTokSettings;
+}): Promise<PublishOutcome> {
   if (!env.zernioEnabled) {
     if (env.allowSimulatedPublish) {
       logger.warn(
         { accountId: params.zernioAccountId },
         'Zernio disabled — simulated publish (dev only)',
       );
-      return { externalPostId: `sim-${Date.now()}` };
+      return { state: 'published', externalPostId: `sim-${Date.now()}` };
     }
     throw new Error(
       'Social publishing is not configured (ZERNIO_API_KEY missing). Cannot publish to connected accounts.',
@@ -213,41 +379,38 @@ async function publishToAccount(params: {
     );
   }
 
-  const initial = await zernioClient.createPost({
+  let result = await zernioClient.createPost({
     platform: params.platform,
     accountId: params.zernioAccountId,
     content: params.content,
     mediaItems: params.media.length > 0 ? params.media : undefined,
     publishNow: true,
+    tiktokSettings: params.tiktokSettings,
   });
 
-  if (initial.errorMessage) {
-    throw new Error(initial.errorMessage);
-  }
+  for (let attempt = 0; ; attempt++) {
+    if (result.errorMessage) throw new Error(result.errorMessage);
 
-  let confirmed = initial;
-  if (!isConfirmedPlatformPublish(initial)) {
-    confirmed = await zernioClient.waitForPublishConfirmation({
-      zernioPostId: initial.postId,
-      accountId: params.zernioAccountId,
-      platform: params.platform,
-    });
-  }
+    const status = (result.platformStatus || result.status || '').toLowerCase();
+    if (status === 'failed' || status === 'error' || status === 'rejected') {
+      throw new Error(`Platform rejected the post (status: ${result.platformStatus || result.status}).`);
+    }
 
-  if (!isConfirmedPlatformPublish(confirmed)) {
-    throw new Error(
-      confirmed.errorMessage ??
-        `Publish was not confirmed by the platform (status: ${confirmed.platformStatus || confirmed.status}).`,
-    );
-  }
+    if (isConfirmedPlatformPublish(result)) {
+      return {
+        state: 'published',
+        externalPostId: result.platformPostId?.trim() || result.postId,
+        platformPostUrl: result.platformPostUrl,
+        zernioPostId: result.postId,
+      };
+    }
 
-  const platformPostId = confirmed.platformPostId?.trim();
-  if (!platformPostId) {
-    throw new Error('Platform did not return a post ID — delivery could not be verified.');
-  }
+    if (attempt >= CONFIRM_ATTEMPTS) {
+      return { state: 'pending', zernioPostId: result.postId };
+    }
 
-  return {
-    externalPostId: platformPostId,
-    platformPostUrl: confirmed.platformPostUrl,
-  };
+    await new Promise((r) => setTimeout(r, CONFIRM_INTERVAL_MS));
+    const latest = await zernioClient.getPost(result.postId);
+    result = zernioClient.mapPostToCreateResult(latest, params.zernioAccountId, params.platform);
+  }
 }

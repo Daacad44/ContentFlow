@@ -53,6 +53,16 @@ export const socialAccountController = {
     return ok(res, { health }, 'OK');
   },
 
+  async tiktokCreatorInfo(req: Request, res: Response) {
+    const mediaType = req.query.mediaType === 'photo' ? 'photo' : 'video';
+    const info = await socialAccountService.getTikTokCreatorInfo(
+      req.params.workspaceId,
+      req.params.accountId,
+      mediaType,
+    );
+    return ok(res, { creatorInfo: info }, 'OK');
+  },
+
   async listSelection(req: Request, res: Response) {
     const options = await socialAccountService.listSelectionOptions({
       workspaceId: req.params.workspaceId,

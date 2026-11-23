@@ -127,7 +127,7 @@ export const publishQueueService = {
     await publishJobService.addLog(publishJobId, 'info', 'Publish job started');
 
     try {
-      await postPublishService.publishPost(postId, workspaceId);
+      const published = await postPublishService.publishPost(postId, workspaceId);
 
       await publishJobService.updateStatus(publishJobId, 'COMPLETED', {
         completedAt: new Date(),
@@ -136,7 +136,9 @@ export const publishQueueService = {
       await publishJobService.addLog(
         publishJobId,
         'info',
-        'Post delivery confirmed by all target platforms',
+        published.status === PostStatus.PUBLISHING
+          ? 'Post accepted; waiting for the platform to finish processing'
+          : 'Post delivery confirmed by all target platforms',
       );
 
       await auditService.record({

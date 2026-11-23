@@ -528,6 +528,8 @@ model Post {
   status      PostStatus @default(DRAFT)
   scheduledAt DateTime?
   publishedAt DateTime?
+  /// Per-platform options, e.g. { tiktok: { privacyLevel, allowComment, ... } }
+  platformSettings Json?
 
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -730,6 +732,8 @@ model PostTarget {
   platformPostUrl    String?
   errorMessage       String?
   publishedAt        DateTime?
+  /// Zernio's post id, used to confirm delivery later when the platform is still processing.
+  zernioPostId       String?
 
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -737,6 +741,7 @@ model PostTarget {
   @@unique([postId, connectedAccountId])
   @@index([postId])
   @@index([connectedAccountId])
+  @@index([status])
   @@map("post_targets")
 }
 

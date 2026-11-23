@@ -28,6 +28,22 @@ export function validatePlatformPublishRequirements(
   return null;
 }
 
+/** TikTok accepts one video, or 1–35 photos (JPG/PNG/WebP); never both in one post. */
+export function validateTikTokMedia(media: Array<{ mimeType: string }>): string | null {
+  if (media.length === 0) return 'TikTok posts require a video or photos.';
+  const videos = media.filter((m) => m.mimeType.startsWith('video/'));
+  const images = media.filter((m) => m.mimeType.startsWith('image/'));
+  if (videos.length > 0 && images.length > 0) {
+    return "TikTok can't mix photos and a video in one post.";
+  }
+  if (videos.length > 1) return 'TikTok allows one video per post.';
+  if (images.some((m) => m.mimeType === 'image/gif')) {
+    return "TikTok doesn't accept GIFs. Use JPG, PNG or WebP.";
+  }
+  if (images.length > 35) return 'TikTok allows up to 35 photos per post.';
+  return null;
+}
+
 /** Zernio internal Mongo IDs are 24-char hex strings. Real platform IDs differ. */
 export function isLikelyZernioInternalId(id: string, zernioPostId?: string): boolean {
   if (zernioPostId && id === zernioPostId) return true;
@@ -62,6 +78,12 @@ export function isConfirmedPlatformPublish(result: PublishConfirmationInput): bo
   const status = (result.platformStatus || result.status || '').toLowerCase();
   if (status === 'failed' || status === 'error' || status === 'rejected') {
     return false;
+  }
+
+  // TikTok exposes the video id and URL only minutes after accepting a post, so Zernio's
+  // "published" is the confirmation; the URL is filled in later by reconciliation.
+  if (result.platform?.toLowerCase() === 'tiktok') {
+    return status === 'published' || status === 'success' || status === 'live';
   }
 
   const platformId = result.platformPostId?.trim();

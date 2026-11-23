@@ -6,6 +6,7 @@ import { PostStatus, PublishJobStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { publishQueueService } from './publishQueue.service';
 import { publishJobService } from './publishJob.service';
+import { postPublishService } from './postPublish.service';
 import { logger } from '../utils/logger';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -38,12 +39,31 @@ export const postSchedulerService = {
    * (in-process poller, Vercel Cron, Supabase pg_cron): each post's publish job is claimed
    * atomically, so a post is never published twice.
    */
-  async processDuePosts(limit = 20): Promise<{ due: number; published: number; failed: number; skipped: number }> {
-    const summary = { due: 0, published: 0, failed: 0, skipped: 0 };
+  async processDuePosts(limit = 20): Promise<{
+    due: number;
+    published: number;
+    failed: number;
+    skipped: number;
+    reconciled?: { checked: number; published: number; failed: number };
+  }> {
+    const summary: {
+      due: number;
+      published: number;
+      failed: number;
+      skipped: number;
+      reconciled?: { checked: number; published: number; failed: number };
+    } = { due: 0, published: 0, failed: 0, skipped: 0 };
     if (processing) return summary;
     processing = true;
 
     try {
+      // Confirm posts the platforms were still processing (videos, TikTok) on earlier runs.
+      try {
+        summary.reconciled = await postPublishService.reconcilePendingTargets();
+      } catch (err) {
+        logger.error({ err }, 'Reconciling pending post targets failed');
+      }
+
       const duePosts = await prisma.post.findMany({
         where: {
           status: PostStatus.SCHEDULED,

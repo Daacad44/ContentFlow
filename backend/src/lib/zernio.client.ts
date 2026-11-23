@@ -61,6 +61,27 @@ export interface ZernioPlatformPostResult {
   errorMessage?: string;
 }
 
+export interface ZernioTikTokSettings {
+  privacyLevel: string;
+  allowComment: boolean;
+  allowDuet: boolean;
+  allowStitch: boolean;
+  commercialContent: 'none' | 'brand_organic' | 'brand_content';
+}
+
+export interface ZernioTikTokCreatorInfo {
+  creator?: { nickname?: string; avatarUrl?: string; isVerified?: boolean; canPostMore?: boolean };
+  privacyLevels?: Array<{ value: string; label: string }>;
+  postingLimits?: {
+    maxVideoDurationSec?: number;
+    interactionSettings?: Record<
+      string,
+      { enabled: boolean; required?: boolean; default?: boolean; label?: string } | null
+    >;
+  };
+  commercialContentTypes?: Array<{ value: string; label: string }>;
+}
+
 export interface ZernioCreatePostResult {
   postId: string;
   status: string;
@@ -333,6 +354,7 @@ class ZernioClient {
     mediaItems?: Array<{ type: 'image' | 'video'; url: string; title?: string }>;
     scheduledAt?: string;
     publishNow?: boolean;
+    tiktokSettings?: ZernioTikTokSettings;
   }): Promise<ZernioCreatePostResult> {
     const body: Record<string, unknown> = {
       content: params.content,
@@ -349,6 +371,21 @@ class ZernioClient {
       body.mediaItems = params.mediaItems;
     }
 
+    if (params.tiktokSettings) {
+      const t = params.tiktokSettings;
+      const isPhoto = !!params.mediaItems?.length && params.mediaItems.every((m) => m.type === 'image');
+      body.tiktokSettings = {
+        privacy_level: t.privacyLevel,
+        allow_comment: t.allowComment,
+        ...(isPhoto ? { media_type: 'photo' } : { allow_duet: t.allowDuet, allow_stitch: t.allowStitch }),
+        commercialContentType: t.commercialContent,
+        isBrandOrganicPost: t.commercialContent === 'brand_organic',
+        brandPartnerPromote: t.commercialContent === 'brand_content',
+        content_preview_confirmed: true,
+        express_consent_given: true,
+      };
+    }
+
     const data = await this.request<{
       post: {
         _id: string;
@@ -359,6 +396,13 @@ class ZernioClient {
     }>('/posts', { method: 'POST', body });
 
     return this.mapPostToCreateResult(data.post, params.accountId, params.platform);
+  }
+
+  /** Creator info for a TikTok account: allowed privacy levels, interaction settings, limits. */
+  async getTikTokCreatorInfo(accountId: string, mediaType: 'video' | 'photo' = 'video') {
+    return this.request<ZernioTikTokCreatorInfo>(
+      `/accounts/${encodeURIComponent(accountId)}/tiktok/creator-info?mediaType=${mediaType}`,
+    );
   }
 
   async getPost(postId: string) {
